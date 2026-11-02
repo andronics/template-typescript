@@ -11,3 +11,7 @@ npm run test:integration                        # integration tests (real extern
 ```
 
 CI runs the unit tests on every supported Node.js version, together with ESLint, Prettier, tsc (strict), the wiki checks and the manifest checks. All of them block a merge.
+[% if integration_ci %]
+
+The **Integration tests** job runs the integration tests too, on the minimum Node.js version, with every package in `contrib/system-packages.txt`. It fails if no test runs or one is skipped (`skip`, `skipIf` or `todo`), so a missing package, device or service fails it rather than passing it. A test expected to fail is `test.fails`, which passes.
+[% endif %]

@@ -25,19 +25,20 @@ BASE_VERSION = "v2.0.0"
 BASE = {"project_name": "demo", "description": "A demo project", "github_owner": "metalayerlab"}
 
 # The render matrix: kind x container_image x contrib (has_cli follows kind). Each one must
-# pass its own Definition of done and base's contract cases. `container` adds
+# pass its own Definition of done and base's contract cases. integration_ci is on for a service,
+# the library and a web app (decision 0002), so actionlint and each check see its job. `container` adds
 # template-container (a sibling checkout) with these answers.
 MATRIX: dict[str, dict[str, object]] = {
     "service-image": {"kind": "service", "container_image": True, "contrib": ["docker", "k8s", "systemd"],
-                      "puid_pgid": True, "container": {}},
+                      "puid_pgid": True, "integration_ci": True, "container": {}},
     "service-systemd": {"kind": "service", "container_image": False, "contrib": ["systemd"]},
     "service": {"kind": "service", "container_image": False, "contrib": []},
     "cli-image": {"kind": "cli", "container_image": True, "container": {"multi_arch": False}},
     "cli": {"kind": "cli", "container_image": False},
-    "library": {"kind": "library"},
+    "library": {"kind": "library", "integration_ci": True},
     "web-image": {"kind": "web", "container_image": True, "contrib": ["docker", "k8s"], "container": {}},
     "web-image-bare": {"kind": "web", "container_image": True, "contrib": []},
-    "web": {"kind": "web", "container_image": False, "contrib": []},
+    "web": {"kind": "web", "container_image": False, "contrib": [], "integration_ci": True},
 }  # fmt: skip
 
 

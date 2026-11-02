@@ -239,6 +239,12 @@ timezone:
   default: Europe/London
   when: "[[ kind == 'service' ]]"
 
+# Every kind, web included; no extras question (docs/decisions/0002).
+integration_ci:
+  type: bool
+  help: Add a CI job that runs the integration tests (RUN_INTEGRATION=1) with contrib/system-packages.txt's build and runtime packages? It fails if no test runs or one is skipped.
+  default: false
+
 # ------------------------------------------------- derived (never asked)
 
 has_cli:
