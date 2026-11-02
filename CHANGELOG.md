@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/andronics/template-typescript/compare/v2.1.0...v2.1.1) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* generated tests clean up their temp dirs ([#12](https://github.com/andronics/template-typescript/issues/12)) ([0c86813](https://github.com/andronics/template-typescript/commit/0c868132c1ab906764fc1df4c6b4cbdb4852a981)), closes [#11](https://github.com/andronics/template-typescript/issues/11)
+
 ## [2.1.0](https://github.com/andronics/template-typescript/compare/v2.0.1...v2.1.0) (2026-11-02)
 
 
