@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/andronics/template-typescript/compare/v2.1.1...v2.1.2) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* the design-record template asks for people only as authors ([#15](https://github.com/andronics/template-typescript/issues/15)) ([9426e15](https://github.com/andronics/template-typescript/commit/9426e150d4bfc43564b9b17cee07c4566896f5cc))
+
 ## [2.1.1](https://github.com/andronics/template-typescript/compare/v2.1.0...v2.1.1) (2026-11-02)
 
 
