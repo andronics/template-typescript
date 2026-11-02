@@ -29,6 +29,7 @@ As template-base: `[[ ]]`, `[% %]`, `[#! !#]`.
 ## Rules
 
 - Keep every render green: `uv run pytest -n auto`. Pin actions to SHAs. Never credit an AI. Never create tags or releases.
+- Pins are bumped by Renovate (template-base's decision 0002, `pin-bumps.yml`): don't hand-bump one unless it's urgent.
 - A `_skip_if_exists` file (`src/`, `tests/`, most wiki pages) changes only for new projects.
 - Asking the user something? Give your recommendation and why. Reply tersely.
 
