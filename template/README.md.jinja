@@ -86,6 +86,9 @@ Humans: kick-off prompts are in [docs/ai/prompts.md](docs/ai/prompts.md), and th
 ## Development
 [% include 'includes/readme/development.md.jinja' %]
 
+New project? Fill in `.github/repository.toml` (the description, `homepage` = the wiki, `topics`), then run
+`python3 scripts/repo-metadata.py` to set GitHub's About box from it; CI warns when the two drift.
+
 The workflow is: a branch, Conventional Commit PR titles, squash merge. Releases are automated by
 release-please. See [Contributing]([[ repo_url ]]/wiki/Contributing).
 
