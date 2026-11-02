@@ -81,6 +81,22 @@ def test_definition_of_done(project: Path) -> None:
         assert result.returncode == 0 and "manifests OK" in result.stdout, result.stdout + result.stderr
 
 
+def test_unit_tests_leave_no_temp_dirs(project: Path, tmp_path: Path) -> None:
+    """The unit tests remove every directory tests/helpers.ts makes (`test-*` in the temp dir)."""
+    if not (project / "tests/helpers.ts").is_file():
+        pytest.skip("only a project with a CLI has tests/helpers.ts")
+    if not (project / "node_modules").is_dir():
+        assert run(project, *DOD[0]).returncode == 0
+    temp = tmp_path / "tmpdir"
+    temp.mkdir()
+    env = {k: v for k, v in os.environ.items() if k not in ("VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT")}
+    result = subprocess.run(["npm", "test"], cwd=project, capture_output=True, text=True,
+                            env={**env, "TMPDIR": str(temp)})  # fmt: skip
+    assert result.returncode == 0, result.stdout + result.stderr
+    leaked = sorted(p.name for p in temp.glob("test-*"))
+    assert not leaked, f"{len(leaked)} left behind: {leaked}"
+
+
 @pytest.mark.docker
 def test_docker_checks(project: Path) -> None:
     """The Definition of done's Docker-only checks, and the CI-only linters."""

@@ -1,10 +1,21 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** A new empty directory. */
+import { afterAll, onTestFinished } from "vitest";
+
+/** A new empty directory, removed when the test that made it finishes (made outside a test: when its file's tests do). */
 export function tempDir(): string {
-  return mkdtempSync(join(tmpdir(), "test-"));
+  const dir = mkdtempSync(join(tmpdir(), "test-"));
+  const remove = (): void => {
+    rmSync(dir, { recursive: true, force: true });
+  };
+  try {
+    onTestFinished(remove);
+  } catch {
+    afterAll(remove); // onTestFinished throws outside a test, as for a module-level constant
+  }
+  return dir;
 }
 
 /** Write a config file and return its path. */

@@ -6,5 +6,5 @@
 [% endif %]
 [% if has_cli %]
 | `tests/setup.ts` | Runs before every test file: no `[[ env_prefix ]]*` leakage from your shell |
-| `tests/helpers.ts` | Shared helpers: `tempDir`, `writeConfig` |
+| `tests/helpers.ts` | Shared helpers: `tempDir` (removed after its test), `writeConfig` |
 [% endif %]
