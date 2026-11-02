@@ -5,7 +5,7 @@ file is for what maintainers (and their AI assistants) should know at a glance.
 
 ## Open
 
-- No CI job runs the integration tests: projects get `npm run test:integration` and `tests/integration/`, but nothing runs them (template-python has `integration_ci`). Needs a design record first.
+- No CI job runs the integration tests: projects get `npm run test:integration` and `tests/integration/`, but nothing runs them (template-python has `integration_ci`). Proposed in [0002](docs/decisions/0002-integration-ci.md).
 
 ## Decided against (don't re-propose without reading this first)
 
