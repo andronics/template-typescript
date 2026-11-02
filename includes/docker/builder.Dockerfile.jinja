@@ -1,0 +1,30 @@
+[% if kind == 'web' %]
+# Dependencies, then the static files in dist/
+
+WORKDIR /app
+
+# Dependencies first, so a source change doesn't reinstall them
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
+COPY tsconfig.json vite.config.ts index.html ./
+COPY public/ ./public/
+COPY src/ ./src/
+RUN npm run build
+[% else %]
+# Dependencies, then dist/, then only the runtime dependencies
+
+WORKDIR /app
+
+# Dependencies first, so a source change doesn't reinstall them
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+
+COPY tsconfig.json tsconfig.build.json ./
+COPY src/ ./src/
+RUN npm run build \
+    && npm prune --omit=dev --no-audit --no-fund \
+    && chmod 0755 dist/cli.js \
+    && mkdir bin && ln -s ../dist/cli.js bin/[[ project_name ]]
+[% endif %]
+

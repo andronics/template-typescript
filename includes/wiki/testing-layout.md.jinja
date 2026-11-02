@@ -1,0 +1,10 @@
+| `tests/unit/` | Fast and offline: no network, no real external systems. Most tests. |
+| `tests/integration/` | Real dependencies; run only by `npm run test:integration` (`RUN_INTEGRATION=1`) |
+[% if kind == 'web' %]
+| `tests/setup.ts` | Runs before every test file: each test starts with an empty page |
+| `tests/unit/routes.test.tsx` | The real route table in a memory router, rendered on jsdom with Testing Library |
+[% endif %]
+[% if has_cli %]
+| `tests/setup.ts` | Runs before every test file: no `[[ env_prefix ]]*` leakage from your shell |
+| `tests/helpers.ts` | Shared helpers: `tempDir`, `writeConfig` |
+[% endif %]

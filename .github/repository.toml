@@ -1,0 +1,4 @@
+# GitHub's About box for this repository.
+description = "Copier stack overlay for TypeScript projects (Node.js, npm, ESLint, Vitest; React + Vite for web) on template-base: CI, releases, the wiki, the image"
+homepage = ""
+topics = ["copier", "copier-template", "typescript", "nodejs", "template"]

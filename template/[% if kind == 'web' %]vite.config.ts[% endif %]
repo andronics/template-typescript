@@ -1,0 +1,42 @@
+import { readFileSync } from "node:fs";
+
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vitest/config";
+
+// The bundle carries the name and version as two strings, not the whole package.json.
+const manifest = JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8")) as {
+  name: string;
+  version: string;
+};
+
+// `npm test` runs the unit tests with an 80% coverage floor. Integration tests (real
+// external systems) run only with RUN_INTEGRATION=1 (`npm run test:integration`).
+const integration = process.env.RUN_INTEGRATION === "1";
+
+export default defineConfig({
+  plugins: [react()],
+  define: {
+    __APP_NAME__: JSON.stringify(manifest.name),
+    __APP_VERSION__: JSON.stringify(manifest.version),
+  },
+  // `npm run dev`: the API is same-origin /api, as behind the ingress in production.
+  server: { proxy: { "/api": "http://127.0.0.1:8080" } },
+  test: {
+    environment: "jsdom",
+    include: [
+      integration ? "tests/integration/**/*.test.{ts,tsx}" : "tests/unit/**/*.test.{ts,tsx}",
+    ],
+    passWithNoTests: integration,
+    setupFiles: ["tests/setup.ts"],
+    unstubGlobals: true,
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      // The entry point only wires the router to the page: the tests render the same routes.
+      exclude: ["src/main.tsx"],
+      reporter: ["text"],
+      skipFull: true,
+      thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
+    },
+  },
+});

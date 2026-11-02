@@ -1,0 +1,23 @@
+import { defineConfig } from "vitest/config";
+
+// `npm test` runs the unit tests with an 80% coverage floor. Integration tests (real
+// external systems) run only with RUN_INTEGRATION=1 (`npm run test:integration`).
+const integration = process.env.RUN_INTEGRATION === "1";
+
+export default defineConfig({
+  test: {
+    include: [integration ? "tests/integration/**/*.test.ts" : "tests/unit/**/*.test.ts"],
+    passWithNoTests: integration,
+[% if has_cli %]
+    setupFiles: ["tests/setup.ts"],
+    unstubEnvs: true,
+[% endif %]
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      reporter: ["text"],
+      skipFull: true,
+      thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
+    },
+  },
+});

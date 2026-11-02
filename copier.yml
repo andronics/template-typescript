@@ -1,0 +1,260 @@
+# template-typescript: the stack overlay for a TypeScript project (Node.js, npm, ESLint, Vitest). It goes
+# on top of template-base, whose answers it reads (it never asks base's questions again):
+#
+#   uvx copier copy --trust gh:andronics/template-base my-project
+#   uvx copier copy --trust gh:andronics/template-typescript my-project
+#   uvx copier copy --trust gh:andronics/template-container my-project   # with container_image
+#
+# As the stack overlay it fills base's slots (stack-ci.yml, .agents/stack.md, .gitignore,
+# .pre-commit-config.yaml, .claude/settings.json, README.md, dependabot.yml) and adds
+# typescript-* workflows and scripts/checks.d/20-typescript.sh (docs/decisions/0001).
+
+_min_copier_version: "9.6.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.stack-typescript.yml
+_external_data:
+  base: .copier-answers.base.yml
+
+# GitHub Actions uses ${{ }}, so Jinja uses [[ ]] / [% %] instead.
+_envops:
+  variable_start_string: "[["
+  variable_end_string: "]]"
+  block_start_string: "[%"
+  block_end_string: "%]"
+  comment_start_string: "[#!"
+  comment_end_string: "!#]"
+  keep_trailing_newline: true
+  trim_blocks: true
+  lstrip_blocks: true
+
+# Written once, then the project's: `copier update` never touches them again.
+# Template-owned files (workflows, scripts/check-wiki.py, docs/wiki/.standard.toml,
+# docs/wiki/Release-Process.md, ...) are not listed, so updates reach them.
+_skip_if_exists:
+  - CHANGELOG.md
+  - docker/nginx-site.conf
+  - public/config.json
+  - index.html
+  - .release-please-manifest.json
+  - TODO.md
+  - "src/**"
+  - "tests/**"
+  - "contrib/*.example.yaml"
+  - contrib/system-packages.txt
+  - docs/design/README.md
+  - docs/wiki/Home.md
+  - docs/wiki/Introduction.md
+  - docs/wiki/Quick-Start.md
+  - docs/wiki/In-Depth-Configuration.md
+  - docs/wiki/Architecture-Internals.md
+  - docs/wiki/Security.md
+  - docs/wiki/Testing-Guide.md
+  - docs/wiki/Contributing.md
+  - docs/wiki/Troubleshooting.md
+  - docs/wiki/Frequently-Asked-Questions.md
+  - docs/wiki/HTTP-API-Reference.md
+  - docs/wiki/CLI-Reference.md
+  - docs/wiki/API-Reference.md
+  - docs/wiki/Deployment.md
+  - docs/wiki/_Sidebar.md
+  - docs/wiki/_Footer.md
+
+# Lock dependencies and fill the generated wiki sections (scripts/bootstrap.d/20-typescript.sh),
+# then pre-commit. Base's copy ran bootstrap.sh before this overlay's drop-ins existed, so
+# it runs again here. Needs --trust; without it, run scripts/bootstrap.sh yourself. Only on
+# copy: after an update, scripts/post-update.sh runs the lock refresh (template-update.yml does).
+_tasks:
+  - command: "sh scripts/bootstrap.sh"
+    when: "[[ _copier_operation == 'copy' ]]"
+
+_message_after_copy: |
+  [[ project_name ]] is a TypeScript project.[% if container_image %] For the image's build workflows and the
+  docker/k8s manifests, add the container overlay next:
+
+    uvx copier copy --trust gh:andronics/template-container [[ _copier_conf.dst_path ]]
+  [% endif %]
+
+  Then:
+    cd [[ _copier_conf.dst_path ]]
+    git add -A && git commit -m "chore: initial commit from template-base and template-typescript"
+
+  Read AGENTS.md and .agents/stack.md (what your AI assistant reads too), and
+  docs/ai/prompts.md for the kick-off prompt. Wiki: docs/wiki/.
+
+_message_after_update: |
+  Next: resolve any <<<<<<< markers, run sh scripts/post-update.sh, review git diff and commit.
+
+# ------------------------------------- from base (read, never asked)
+
+# Base must be applied first, at v1.0.0 or later: its answers file is where this overlay
+# reads the project's identity. Fails the copy or update with the reason otherwise.
+# `copier update` re-renders the old and new versions in empty temporary directories, where
+# base's answers file doesn't exist: there the values come from `base_answers`, the copy this
+# overlay keeps in its own answers file (never asked; see decision 0001), and the check passes.
+base_check:
+  type: str
+  when: false
+  default: >-
+    [%- set c = _external_data.base._commit | default('') | string -%]
+    [%- set v = (c | regex_search('^v?(\\d+)\\.(\\d+)\\.(\\d+)', '\\1', '\\2', '\\3')) -%]
+    [%- if not c and base_answers is defined -%]ok
+    [%- elif not c -%][[ {}['template-typescript needs template-base first: .copier-answers.base.yml is missing'].stop ]]
+    [%- elif not v or (v | map('int') | list) < [1, 0, 0] -%][[ {}['template-typescript needs template-base v1.0.0 or later; this project has ' ~ c].stop ]]
+    [%- else -%]ok[%- endif -%]
+
+# Base's answers, read through _external_data (never asked here).
+recorded_base:
+  type: yaml
+  default: "[[ base_answers | default({}) | tojson ]]"
+  when: false
+
+project_name:
+  type: str
+  default: "[[ _external_data.base.project_name | default(recorded_base.project_name) ]]"
+  when: false
+
+description:
+  type: str
+  default: "[[ _external_data.base.description | default(recorded_base.description) ]]"
+  when: false
+
+github_owner:
+  type: str
+  default: "[[ _external_data.base.github_owner | default(recorded_base.github_owner) ]]"
+  when: false
+
+code_owners:
+  type: str
+  default: "[[ _external_data.base.code_owners | default(recorded_base.code_owners) | default('@' ~ github_owner ~ '/maintainers') ]]"
+  when: false
+
+license:
+  type: str
+  default: "[[ _external_data.base.license | default(recorded_base.license) ]]"
+  when: false
+
+copyright_holder:
+  type: str
+  default: "[[ _external_data.base.copyright_holder | default(recorded_base.copyright_holder) | default(github_owner) ]]"
+  when: false
+
+personal_data_guard:
+  type: bool
+  default: "[[ _external_data.base.personal_data_guard | default(recorded_base.personal_data_guard) | default(false) ]]"
+  when: false
+
+# ---------------------------------------------------------------- questions
+
+kind:
+  type: str
+  help: What it is
+  choices:
+    "service: long-running, HTTP API (Fastify), health endpoints": service
+    "cli: command-line tool (commander)": cli
+    "library: importable package only": library
+    # A Vite + React single-page app in an nginx image (docs/decisions/0001).
+    "web: single-page app (Vite + React), served by nginx": web
+  default: service
+
+node_version:
+  type: str
+  help: Minimum Node.js version (Docker base image and the first CI matrix entry)
+  choices: ["24", "26"]
+  default: "24"
+
+port:
+  type: int
+  help: HTTP port the service (or a web app's nginx) listens on
+  default: 8080
+  when: "[[ kind in ['service', 'web'] ]]"
+
+extra_ports:
+  type: yaml
+  help: Other TCP ports the service listens on, besides `port` (for example [3128]). Each is exposed by the image and published by the contrib manifests.
+  default: "[]"
+  when: "[[ kind == 'service' ]]"
+  validator: >-
+    [% if extra_ports is string or extra_ports is not sequence %]
+    A list of port numbers: [3128]
+    [% elif extra_ports | reject('integer') | list or extra_ports | select('lt', 1) | list or extra_ports | select('gt', 65535) | list %]
+    Each port is a number from 1 to 65535
+    [% elif extra_ports | unique | list | length != extra_ports | length %]
+    A port is listed twice
+    [% elif port in extra_ports %]
+    [[ port ]] is already `port`
+    [% endif %]
+
+health_path:
+  type: str
+  help: Liveness endpoint (Docker HEALTHCHECK, k8s probes, CI smoke test)
+  default: /healthz
+  when: "[[ kind in ['service', 'web'] ]]"
+  validator: "[% if not health_path.startswith('/') %]Must start with /[% endif %]"
+
+container_image:
+  type: bool
+  help: Build a container image (a Dockerfile here; template-container adds its build and publish workflows)?
+  default: "[[ kind != 'library' ]]"
+  when: "[[ kind != 'library' ]]"
+
+# The project's deployment shapes. This stack renders the systemd unit and the docs, checks
+# and release bumps for all three; template-container renders the docker and k8s manifests
+# from this answer (it never asks again). scripts/checks.d/20-typescript.sh fails if docker or
+# k8s is chosen and template-container isn't applied.
+contrib:
+  type: str
+  help: Deployment manifests to include under contrib/ (docker and k8s are rendered by template-container)
+  multiselect: true
+  choices:
+    "docker: compose.yml": docker
+    "k8s: kustomize base (Flux-friendly)": k8s
+    # A web app's static files on a host are that host's nginx's job (docs/decisions/0001).
+    "systemd: hardened unit + sysusers":
+      value: systemd
+      validator: "[% if kind != 'service' %]Only with kind: service[% endif %]"
+  default: "[[ [] if kind not in ['service', 'web'] else (['docker', 'k8s'] if container_image else []) + (['systemd'] if kind == 'service' else []) ]]"
+  when: "[[ kind in ['service', 'web'] ]]"
+  validator: >-
+    [% if not container_image and ('docker' in contrib or 'k8s' in contrib) %]
+    docker and k8s need a container image
+    [% endif %]
+
+puid_pgid:
+  type: bool
+  help: Container starts as root to chown its state directory, then drops to PUID:PGID? No (default) = runs as uid 1000.
+  default: false
+  when: "[[ container_image and kind == 'service' ]]"
+
+timezone:
+  type: str
+  help: Default TZ in compose and k8s manifests
+  default: Europe/London
+  when: "[[ kind == 'service' ]]"
+
+# ------------------------------------------------- derived (never asked)
+
+has_cli:
+  type: bool
+  default: "[[ kind in ['service', 'cli'] ]]"
+  when: false
+
+env_prefix:
+  type: str
+  default: "[[ project_name | replace('-', '_') | upper ]]_"
+  when: false
+
+image:
+  type: str
+  default: "ghcr.io/[[ github_owner ]]/[[ project_name ]]"
+  when: false
+
+repo_url:
+  type: str
+  default: "https://github.com/[[ github_owner ]]/[[ project_name ]]"
+  when: false
+
+copyright_year:
+  type: str
+  default: "[[ '%Y' | strftime ]]"
+  when: false

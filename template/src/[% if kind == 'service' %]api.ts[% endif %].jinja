@@ -1,0 +1,81 @@
+/**
+ * The HTTP API.
+ *
+ * The wiki's HTTP-API-Reference endpoint table is generated from this app's OpenAPI
+ * document (scripts/gen-wiki.ts): give every route a `summary`, and a `description`
+ * when it needs more than a line.
+ */
+import swagger from "@fastify/swagger";
+import Fastify, { type FastifyServerOptions } from "fastify";
+import {
+  jsonSchemaTransform,
+  serializerCompiler,
+  validatorCompiler,
+  type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import { z } from "zod";
+
+import type { Config } from "./config.ts";
+import { DESCRIPTION, NAME, VERSION } from "./index.ts";
+
+declare module "fastify" {
+  interface FastifyInstance {
+    config: Config;
+  }
+}
+
+const Status = z.object({ status: z.string() });
+
+export async function createApp(config: Config, options: FastifyServerOptions = {}) {
+  const app = Fastify(options).withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  app.decorate("config", config);
+  await app.register(swagger, {
+    openapi: {
+      info: { title: NAME, version: VERSION, description: DESCRIPTION },
+    },
+    transform: jsonSchemaTransform,
+  });
+
+  app.get(
+    "[[ health_path ]]",
+    {
+      schema: {
+        summary: "Liveness: the process is up",
+        tags: ["health"],
+        response: { 200: Status },
+      },
+    },
+    () => ({ status: "ok" }),
+  );
+
+  app.get(
+    "/readyz",
+    {
+      schema: {
+        summary: "Readiness: able to serve requests",
+        tags: ["health"],
+        response: { 200: Status },
+      },
+    },
+    // Check what the service depends on (database, upstream API) here, and
+    // answer 503 when it can't serve. Liveness must stay dependency-free.
+    () => ({ status: "ready" }),
+  );
+
+  app.get(
+    "/version",
+    {
+      schema: {
+        summary: "The running version",
+        tags: ["meta"],
+        response: { 200: z.object({ version: z.string() }) },
+      },
+    },
+    () => ({ version: VERSION }),
+  );
+
+  await app.ready();
+  return app;
+}

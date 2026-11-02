@@ -1,0 +1,73 @@
+/**
+ * Run-time configuration: `config.json`, fetched when the app starts.
+ *
+ * One image runs in every environment: the deployment mounts its own config.json over
+ * the defaults in public/config.json. A missing file or key means the default; a value
+ * of the wrong type is a ConfigError, which the app shows instead of starting.
+ *
+ * To add a setting, add it to SETTINGS and to Config, and read it in parseConfig.
+ * The wiki's settings table is generated from SETTINGS (scripts/gen-wiki.ts), so write
+ * its help as you want users to read it. Never put a secret here: anyone who can load
+ * the app can read config.json.
+ */
+
+export type Value = string | number | boolean;
+
+/** config.json can't be read, or a value in it has the wrong type. */
+export class ConfigError extends Error {
+  override name = "ConfigError";
+}
+
+export interface Setting {
+  readonly key: string;
+  readonly default: Value;
+  readonly help: string;
+}
+
+export const SETTINGS: readonly Setting[] = [
+  {
+    key: "apiBaseUrl",
+    default: "/api",
+    help: "Base URL of the API the app calls. Same-origin by default: the ingress routes `/api` to the service.",
+  },
+];
+
+export interface Config {
+  readonly apiBaseUrl: string;
+}
+
+/** The settings in raw (a parsed config.json), over the defaults. */
+export function parseConfig(raw: unknown): Config {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new ConfigError("config.json: the top level must be an object");
+  }
+  const values: Record<string, Value> = {};
+  for (const setting of SETTINGS) {
+    const value = (raw as Record<string, unknown>)[setting.key] ?? setting.default;
+    if (typeof value !== typeof setting.default) {
+      const expected = typeof setting.default;
+      throw new ConfigError(`${setting.key}: expected ${expected}, got ${JSON.stringify(value)}`);
+    }
+    values[setting.key] = value as Value;
+  }
+  return { apiBaseUrl: String(values.apiBaseUrl) };
+}
+
+/** Fetch and parse the configuration. No file (a 404, or no network) means the defaults. */
+export async function loadConfig(url: string): Promise<Config> {
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-cache" });
+  } catch {
+    return parseConfig({});
+  }
+  if (response.status === 404) return parseConfig({});
+  if (!response.ok) throw new ConfigError(`${url}: HTTP ${String(response.status)}`);
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    throw new ConfigError(`${url}: not JSON`);
+  }
+  return parseConfig(raw);
+}

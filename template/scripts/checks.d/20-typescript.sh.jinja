@@ -1,0 +1,34 @@
+#!/bin/sh
+# Template-owned: template-typescript. The TypeScript stack's cheap checks, run by
+# scripts/checks.sh (and so by base-ci's `checks` job and pre-commit): the wiki standard,
+# the version and the lock file. Lint, types and tests need the project installed:
+# stack-ci.yml runs them. Reads JSON with python3, so the job needs no Node.js.
+# Quiet on a pass: one line.
+set -eu
+cd "$(dirname "$0")/../.."
+
+# Release PRs are strict: nothing ships while a page still holds skeleton guidance.
+case "${GITHUB_HEAD_REF:-}" in
+    release-please--*) python3 scripts/check-wiki.py --strict ;;
+    *) python3 scripts/check-wiki.py ;;
+esac
+
+python3 - <<'PY'
+import json, re, sys
+version = json.load(open("package.json"))["version"]
+locked = json.load(open("package-lock.json"))
+manifest = json.load(open(".release-please-manifest.json"))["."]
+if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?", version):
+    sys.exit(f"error: package.json: version {version} is not semver")
+if not version == manifest == locked["version"] == locked["packages"][""]["version"]:
+    sys.exit(f"error: package.json ({version}), package-lock.json ({locked['version']}) and "
+             f".release-please-manifest.json ({manifest}) disagree: only release-please changes them")
+PY
+[% if 'docker' in contrib or 'k8s' in contrib %]
+
+# contrib's docker and k8s manifests come from template-container, rendered from this
+# stack's `contrib` answer.
+[ -f .copier-answers.container.yml ] \
+    || { echo "error: contrib names docker or k8s, but template-container isn't applied: uvx copier copy --trust gh:andronics/template-container ."; exit 1; }
+[% endif %]
+echo "20-typescript OK"

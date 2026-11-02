@@ -1,0 +1,100 @@
+[% import 'includes/layer.jinja' as layer with context %]
+# [[ project_name ]]: multi-stage build. Template-owned skeleton; project-specific
+# stages (extra binaries, assets) go between the builder and the runtime stage.
+
+# ============================================================
+# Stage 1: builder
+# ============================================================
+FROM [[ layer.container_base ]] AS builder
+
+# The `build:` packages in contrib/system-packages.txt (project-owned): compilers
+# and headers for dependencies that build from source. None listed: nothing runs
+# hadolint ignore=DL3008,SC2046
+RUN --mount=type=bind,source=contrib/system-packages.txt,target=/tmp/system-packages.txt \
+    set -- $(sed -n 's/^build://p' /tmp/system-packages.txt); \
+    if [ $# -gt 0 ]; then \
+        apt-get update \
+        && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+[% include 'includes/docker/builder.Dockerfile.jinja' %]
+# ============================================================
+# Stage 2: runtime
+# ============================================================
+FROM [[ layer.runtime_base ]]
+
+# Set by CI (docker-build.yml) from the release; OCI labels for `docker inspect`
+ARG VERSION=0.0.0
+ARG REVISION=unknown
+ARG CREATED=unknown
+LABEL org.opencontainers.image.title="[[ project_name ]]" \
+      org.opencontainers.image.description="[[ description | replace('\\', '\\\\') | replace('"', '\\"') ]]" \
+      org.opencontainers.image.source="[[ repo_url ]]" \
+      org.opencontainers.image.documentation="[[ repo_url ]]/wiki" \
+      org.opencontainers.image.licenses="[[ 'LicenseRef-Proprietary' if license == 'Proprietary' else license ]]" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.created="${CREATED}"
+
+# The `runtime:` packages in contrib/system-packages.txt: libraries and tools the
+# project needs at run time. None listed: nothing runs
+# hadolint ignore=DL3008,SC2046
+RUN --mount=type=bind,source=contrib/system-packages.txt,target=/tmp/system-packages.txt \
+    set -- $(sed -n 's/^runtime://p' /tmp/system-packages.txt); \
+    if [ $# -gt 0 ]; then \
+        apt-get update \
+        && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
+[% include 'includes/docker/runtime.Dockerfile.jinja' %]
+RUN useradd --system --create-home --shell /usr/sbin/nologin --uid 1000 [[ project_name ]]
+[% if kind == 'service' %]
+
+# Config is mounted at /etc/[[ project_name ]] (missing is fine: defaults and
+# [[ env_prefix ]]* variables apply); state lives in /var/lib/[[ project_name ]]
+RUN mkdir -p /etc/[[ project_name ]] /var/lib/[[ project_name ]] \
+    && chown [[ project_name ]]:[[ project_name ]] /var/lib/[[ project_name ]]
+COPY contrib/[[ project_name ]].example.yaml /usr/share/[[ project_name ]]/config.example.yaml
+
+# Bind every interface whatever the app's default: in a container, the
+# published ports decide what is reachable, and loopback would be unreachable
+ENV [[ env_prefix ]]LISTEN_HOST=0.0.0.0
+[% if puid_pgid %]
+
+# Starts as root only to give the state directory to PUID:PGID (default
+# 1000:1000), then drops to that user: see docker/entrypoint.sh. It shadows the
+# real command on PATH so `docker exec <c> [[ project_name ]] ...` goes through it too.
+COPY docker/entrypoint.sh /opt/[[ project_name ]]/bin/[[ project_name ]]
+RUN chmod 0755 /opt/[[ project_name ]]/bin/[[ project_name ]]
+ENV PATH="/opt/[[ project_name ]]/bin:$PATH"
+[% else %]
+
+USER 1000:1000
+[% endif %]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+[% include 'includes/docker/healthcheck.Dockerfile.jinja' %]
+
+EXPOSE [[ ([port] + extra_ports) | join(' ') ]]
+VOLUME ["/var/lib/[[ project_name ]]"]
+
+ENTRYPOINT ["[[ project_name ]]"]
+CMD ["serve"]
+[% elif kind == 'web' %]
+
+USER 1000:1000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:[[ port ]][[ health_path ]]"]
+
+EXPOSE [[ port ]]
+
+CMD ["nginx", "-g", "daemon off;"]
+[% else %]
+
+USER 1000:1000
+ENTRYPOINT ["[[ project_name ]]"]
+CMD ["--help"]
+[% endif %]

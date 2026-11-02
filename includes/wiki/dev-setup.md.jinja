@@ -1,0 +1,9 @@
+```sh
+git clone [[ repo_url ]] && cd [[ project_name ]]
+npm ci                                   # Node.js >= [[ node_version ]]
+uv tool install pre-commit && pre-commit install -t pre-commit -t commit-msg
+npm test                                 # all green before you start
+[% if kind == 'web' %]
+npm run dev                              # the app on http://localhost:5173, /api proxied to :8080
+[% endif %]
+```

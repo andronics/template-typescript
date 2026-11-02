@@ -1,0 +1,65 @@
+# nginx for [[ project_name ]]: serves the single-page app in /usr/share/nginx/html.
+# Template-owned: template-typescript. Add headers, a CSP or locations in docker/nginx-site.conf.
+# Runs as uid 1000 on a read-only root: everything nginx writes is under /tmp.
+worker_processes 1;
+pid /tmp/nginx.pid;
+error_log stderr warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /dev/stdout;
+    sendfile on;
+    server_tokens off;
+
+    client_body_temp_path /tmp/client_body;
+    proxy_temp_path /tmp/proxy;
+    fastcgi_temp_path /tmp/fastcgi;
+    uwsgi_temp_path /tmp/uwsgi;
+    scgi_temp_path /tmp/scgi;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    server {
+        listen [[ port ]];
+        root /usr/share/nginx/html;
+
+        # Every response. `merge`: a location's add_header adds to these, not replaces them
+        add_header_inherit merge;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+
+        # Liveness: answered by nginx itself, without touching the file system
+        location = [[ health_path ]] {
+            access_log off;
+            default_type text/plain;
+            return 200 "ok\n";
+        }
+
+        # Vite's content-hashed files never change. A missing one is a 404, never
+        # index.html: a stale tab would otherwise run HTML as a script
+        location /assets/ {
+            add_header Cache-Control "public, max-age=31536000, immutable";
+            try_files $uri =404;
+        }
+
+        # Mounted per deployment: always fetched fresh, and never the fallback page
+        location = /config.json {
+            add_header Cache-Control no-cache;
+            try_files $uri =404;
+        }
+
+        # Any other path is a route of the app: index.html, revalidated every time
+        location / {
+            add_header Cache-Control no-cache;
+            try_files $uri /index.html;
+        }
+
+        include /etc/nginx/site.conf;
+    }
+}

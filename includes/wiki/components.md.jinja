@@ -1,0 +1,16 @@
+[% if kind == 'web' %]
+| `index.html` | The page shell: loads `src/main.tsx` |
+| `src/main.tsx` | Loads the run-time config, then renders the router |
+| `src/routes.tsx` | The route table: the layout, its error page, and the pages in `src/pages/` |
+| `src/config.ts` | Settings, read from `/config.json` at run time |
+| `docker/nginx.conf` | Serves `dist/`: the health endpoint, cache headers, any path falls back to `index.html` |
+[% else %]
+| `src/index.ts` | Public API and the package version |
+[% endif %]
+[% if has_cli %]
+| `src/config.ts` | Settings and their precedence (`_FILE` > env > file > default) |
+| `src/cli.ts` | The `[[ project_name ]]` command (commander) |
+[% endif %]
+[% if kind == 'service' %]
+| `src/api.ts` | The HTTP API (Fastify): health, readiness, version |
+[% endif %]

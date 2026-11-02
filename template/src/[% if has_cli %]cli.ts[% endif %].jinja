@@ -1,0 +1,124 @@
+#!/usr/bin/env node
+/**
+ * The `[[ project_name ]]` command.
+ *
+ * The wiki's CLI-Reference page is generated from this program (scripts/gen-wiki.ts),
+ * so command descriptions and option help are user documentation.
+ */
+import { Command, CommanderError, Option } from "commander";
+[% if kind == 'service' %]
+import type { FastifyInstance } from "fastify";
+
+import { createApp } from "./api.ts";
+[% else %]
+
+[% endif %]
+[% if kind == 'service' %]
+import {
+  CONFIG_ENV,
+  ConfigError,
+  DEFAULT_CONFIG_PATH,
+  SETTINGS,
+  loadConfig,
+  type Config,
+  type Value,
+} from "./config.ts";
+[% else %]
+import {
+  CONFIG_ENV,
+  ConfigError,
+  DEFAULT_CONFIG_PATH,
+  SETTINGS,
+  loadConfig,
+  type Value,
+} from "./config.ts";
+[% endif %]
+import { DESCRIPTION, NAME, VERSION } from "./index.ts";
+
+function configOption(): Option {
+  return new Option(
+    "-c, --config <path>",
+    `Config file (default ${DEFAULT_CONFIG_PATH}; missing is fine).`,
+  ).env(CONFIG_ENV);
+}
+
+interface ConfigOptions {
+  config?: string;
+}
+
+/** The command line, without running it: `main()` runs it, and gen-wiki documents it. */
+export function program(): Command {
+  // Before the subcommands, so they inherit it: errors throw, and main() decides the exit code.
+  const cli = new Command(NAME).description(DESCRIPTION).exitOverride();
+
+  cli
+    .command("version")
+    .description("Print the version.")
+    .action(() => {
+      console.log(VERSION);
+    });
+
+  cli
+    .command("config")
+    .description(
+      "Print the effective configuration and where each value came from. Secrets are masked.",
+    )
+    .addOption(configOption())
+    .action((options: ConfigOptions) => {
+      const cfg = loadConfig(options.config);
+      const values: Record<string, Value> = {
+        log_level: cfg.logLevel,
+[% if kind == 'service' %]
+        "listen.host": cfg.host,
+        "listen.port": cfg.port,
+        state_dir: cfg.stateDir,
+[% endif %]
+      };
+      for (const setting of SETTINGS) {
+        const shown = setting.secret ? "********" : String(values[setting.key]);
+        console.log(`${setting.key} = ${shown}  (${String(cfg.sources[setting.key])})`);
+      }
+    });
+[% if kind == 'service' %]
+
+  cli
+    .command("serve")
+    .description("Run the HTTP server.")
+    .addOption(configOption())
+    .action(async (options: ConfigOptions) => {
+      await serve(loadConfig(options.config));
+    });
+[% endif %]
+
+  return cli;
+}
+[% if kind == 'service' %]
+
+/** Start the HTTP server; it stops on SIGINT or SIGTERM. */
+export async function serve(cfg: Config): Promise<FastifyInstance> {
+  const level = cfg.logLevel === "WARNING" ? "warn" : cfg.logLevel.toLowerCase();
+  const app = await createApp(cfg, { logger: { level } });
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => void app.close());
+  }
+  await app.listen({ host: cfg.host, port: cfg.port });
+  return app;
+}
+[% endif %]
+
+/** Run the command line; the exit code: 0, 2 for a configuration error, or commander's. */
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  try {
+    await program().parseAsync(argv, { from: "user" });
+    return 0;
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      console.error(`error: ${e.message}`);
+      return 2;
+    }
+    if (e instanceof CommanderError) return e.exitCode;
+    throw e;
+  }
+}
+
+if (import.meta.main) process.exitCode = await main();

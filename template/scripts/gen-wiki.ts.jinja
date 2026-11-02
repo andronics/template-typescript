@@ -1,0 +1,172 @@
+/**
+ * Regenerate the generated sections of docs/wiki/ from the code. Template-owned: template-typescript.
+ *
+ *     node scripts/gen-wiki.ts           # rewrite the sections
+ *     node scripts/gen-wiki.ts --check   # CI: fail if any section is stale
+ *
+ * A generated section sits between markers, and everything between them is replaced:
+ *
+ *     <!-- generated:start settings -->
+ *     ...
+ *     <!-- generated:end settings -->
+ *
+ * Blocks: settings (SETTINGS in config.ts), cli (the commander program), http-api (the
+ * OpenAPI document). Write prose around the markers, never inside them.
+ */
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+[% if has_cli %]
+
+import type { Command } from "commander";
+
+[% if kind == 'service' %]
+import { createApp } from "../src/api.ts";
+[% endif %]
+import { program } from "../src/cli.ts";
+import { SETTINGS, envName[% if kind == 'service' %], loadConfig[% endif %] } from "../src/config.ts";
+[% elif kind == 'web' %]
+
+import { SETTINGS } from "../src/config.ts";
+[% endif %]
+
+const WIKI = "docs/wiki";
+[% if has_cli %]
+
+function cell(text: string): string {
+  return text.replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+export function settings(): string {
+  const rows = ["| Key | Environment variable | Default | Description |", "|---|---|---|---|"];
+  for (const s of SETTINGS) {
+    const value = String(s.default);
+    const shown = value === "" ? "*(none)*" : `\`${value}\``;
+    const secret = s.secret ? " 🔒 Secret: use the `_FILE` variant." : "";
+    rows.push(`| \`${s.key}\` | \`${envName(s)}\` | ${shown} | ${cell(s.help)}${secret} |`);
+  }
+  return rows.join("\n");
+}
+
+/** Every runnable command under a group, nested groups included. */
+function leaves(group: Command, prefix: string): [string, Command][] {
+  const found: [string, Command][] = [];
+  const commands = [...group.commands].sort((a, b) => a.name().localeCompare(b.name()));
+  for (const cmd of commands) {
+    if (cmd.commands.length > 0) found.push(...leaves(cmd, `${prefix}${cmd.name()} `));
+    else found.push([`${prefix}${cmd.name()}`, cmd]);
+  }
+  return found;
+}
+
+export function cli(root: Command = program()): string {
+  const out: string[] = [];
+  for (const [name, cmd] of leaves(root, "")) {
+    out.push(`### \`${root.name()} ${name}\``, "", cmd.description().trim(), "");
+    if (cmd.registeredArguments.length > 0) {
+      out.push("| Argument | Description |", "|---|---|");
+      for (const arg of cmd.registeredArguments) {
+        out.push(`| \`${arg.name().toUpperCase()}\` | ${cell(arg.description)} |`);
+      }
+      out.push("");
+    }
+    if (cmd.options.length > 0) {
+      out.push("| Option | Environment variable | Description |", "|---|---|---|");
+      for (const opt of cmd.options) {
+        const flags = [opt.long, opt.short].filter((f) => f !== undefined).map((f) => `\`${f}\``);
+        const env = opt.envVar === undefined ? "" : `\`${opt.envVar}\``;
+        out.push(`| ${flags.join(", ")} | ${env} | ${cell(opt.description)} |`);
+      }
+      out.push("");
+    }
+  }
+  return out.join("\n").trimEnd();
+}
+[% elif kind == 'web' %]
+
+function cell(text: string): string {
+  return text.replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+export function settings(): string {
+  const rows = ["| Key | Default | Description |", "|---|---|---|"];
+  for (const s of SETTINGS) {
+    const value = JSON.stringify(s.default);
+    rows.push(`| \`${s.key}\` | \`${value}\` | ${cell(s.help)} |`);
+  }
+  return rows.join("\n");
+}
+[% endif %]
+[% if kind == 'service' %]
+
+interface OpenApi {
+  paths?: Record<string, Record<string, { summary?: string }>>;
+}
+
+export async function httpApi(): Promise<string> {
+  const app = await createApp(loadConfig("/nonexistent", {}));
+  const document = app.swagger() as OpenApi;
+  await app.close();
+  const rows = ["| Method | Path | Summary |", "|---|---|---|"];
+  for (const [path, operations] of Object.entries(document.paths ?? {}).sort()) {
+    for (const [method, operation] of Object.entries(operations).sort()) {
+      rows.push(`| \`${method.toUpperCase()}\` | \`${path}\` | ${cell(operation.summary ?? "")} |`);
+    }
+  }
+  return rows.join("\n");
+}
+[% endif %]
+
+[% if has_cli %]
+const BLOCKS: Record<string, () => string | Promise<string>> = {
+  settings,
+  cli: () => cli(),
+[% if kind == 'service' %]
+  "http-api": httpApi,
+[% endif %]
+};
+[% elif kind == 'web' %]
+const BLOCKS: Record<string, () => string | Promise<string>> = { settings };
+[% else %]
+const BLOCKS: Record<string, () => string | Promise<string>> = {};
+[% endif %]
+
+const PATTERN = /<!--\s*generated:start\s+(\S+)\s*-->[\s\S]*?<!--\s*generated:end\s+\1\s*-->/g;
+
+export async function render(text: string): Promise<string> {
+  const blocks = new Map<string, string>();
+  for (const [, name = ""] of text.matchAll(PATTERN)) {
+    const block = BLOCKS[name];
+    if (block === undefined) throw new Error(`unknown generated block "${name}"`);
+    blocks.set(name, await block());
+  }
+  return text.replace(PATTERN, (match, name: string) => {
+    const start = match.split("-->")[0] ?? "";
+    return `${start}-->\n${blocks.get(name) ?? ""}\n<!-- generated:end ${name} -->`;
+  });
+}
+
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
+  const check = argv.includes("--check");
+  const stale: string[] = [];
+  const pages = readdirSync(WIKI)
+    .filter((f) => f.endsWith(".md"))
+    .sort()
+    .map((f) => join(WIKI, f));
+  for (const page of pages) {
+    const text = readFileSync(page, "utf8");
+    const updated = await render(text);
+    if (updated !== text) {
+      stale.push(page);
+      if (!check) writeFileSync(page, updated, "utf8");
+    }
+  }
+  if (check && stale.length > 0) {
+    for (const page of stale) console.log(`error: ${page}: generated section is stale`);
+    console.log("Run `node scripts/gen-wiki.ts` and commit the result.");
+    return 1;
+  }
+  console.log((check ? "stale: " : "updated: ") + (stale.join(", ") || "none"));
+  return 0;
+}
+
+if (import.meta.main) process.exitCode = await main();

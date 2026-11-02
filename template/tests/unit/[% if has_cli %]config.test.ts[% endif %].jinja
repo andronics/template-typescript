@@ -1,0 +1,119 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { expect, test } from "vitest";
+
+import { ConfigError, ENV_PREFIX, coerce, loadConfig } from "../../src/config.ts";
+import { tempDir, writeConfig } from "../helpers.ts";
+
+const missing = join(tempDir(), "missing.yaml");
+
+/** An environment of ENV_PREFIX variables: env({ LOG_LEVEL: "debug" }). */
+function env(vars: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(vars).map(([k, v]) => [ENV_PREFIX + k, v]));
+}
+
+test("defaults when there is no file", () => {
+  const cfg = loadConfig(missing, {});
+  expect(cfg.logLevel).toBe("INFO");
+  expect(cfg.sources.log_level).toBe("default");
+});
+
+test("the file overrides the default", () => {
+  const cfg = loadConfig(writeConfig("log_level: debug\n"), {});
+  expect(cfg.logLevel).toBe("DEBUG");
+  expect(cfg.sources.log_level).toBe("file");
+});
+
+test("the environment overrides the file", () => {
+  const cfg = loadConfig(writeConfig("log_level: debug\n"), env({ LOG_LEVEL: "warning" }));
+  expect(cfg.logLevel).toBe("WARNING");
+  expect(cfg.sources.log_level).toBe(`${ENV_PREFIX}LOG_LEVEL`);
+});
+
+test("the _FILE variable overrides the environment", () => {
+  const secret = join(tempDir(), "level");
+  writeFileSync(secret, "error\n", "utf8");
+  const cfg = loadConfig(missing, env({ LOG_LEVEL: "warning", LOG_LEVEL_FILE: secret }));
+  expect(cfg.logLevel).toBe("ERROR");
+  expect(cfg.sources.log_level).toBe(`${ENV_PREFIX}LOG_LEVEL_FILE`);
+});
+
+test("the config path comes from the environment", () => {
+  const cfg = loadConfig(undefined, env({ CONFIG: writeConfig("log_level: error\n") }));
+  expect(cfg.logLevel).toBe("ERROR");
+});
+
+test("an unreadable _FILE variable is an error", () => {
+  const vars = env({ LOG_LEVEL_FILE: join(tempDir(), "nope") });
+  expect(() => loadConfig(missing, vars)).toThrow(/cannot read/);
+});
+
+test("an invalid log level is an error", () => {
+  expect(() => loadConfig(missing, env({ LOG_LEVEL: "loud" }))).toThrow(/log_level/);
+});
+
+test("the top level must be a mapping", () => {
+  expect(() => loadConfig(writeConfig("- a\n- b\n"), {})).toThrow(/mapping/);
+});
+
+test("an empty file means the defaults", () => {
+  expect(loadConfig(writeConfig(""), {}).logLevel).toBe("INFO");
+});
+
+test("invalid YAML is an error", () => {
+  expect(() => loadConfig(writeConfig("log_level: [unclosed\n"), {})).toThrow(ConfigError);
+});
+
+test("an unreadable config file is an error", () => {
+  expect(() => loadConfig(tempDir(), {})).toThrow(/cannot read/);
+});
+[% if kind == 'service' %]
+
+test("nested keys, and integers from the file and the environment", () => {
+  expect(loadConfig(writeConfig("listen:\n  port: 9000\n"), {}).port).toBe(9000);
+  expect(loadConfig(writeConfig(""), env({ LISTEN_PORT: "9001" })).port).toBe(9001);
+});
+
+test("a bad port is an error", () => {
+  const path = writeConfig("");
+  expect(() => loadConfig(path, env({ LISTEN_PORT: "http" }))).toThrow(/expected integer/);
+  expect(() => loadConfig(path, env({ LISTEN_PORT: "70000" }))).toThrow(/not a TCP port/);
+});
+[% endif %]
+
+const flag = { key: "flag", default: false, help: "a flag" };
+
+test.each([
+  ["yes", true],
+  ["0", false],
+  [true, true],
+  ["off", false],
+])("boolean coercion: %j is %j", (raw, expected) => {
+  expect(coerce(flag, raw)).toBe(expected);
+});
+
+test("boolean coercion rejects anything else", () => {
+  expect(() => coerce(flag, "maybe")).toThrow(/expected boolean/);
+});
+
+test("integer coercion", () => {
+  const count = { key: "count", default: 1, help: "a count" };
+  expect(coerce(count, " 7 ")).toBe(7);
+  expect(coerce(count, 3)).toBe(3);
+  expect(() => coerce(count, "1.5")).toThrow(/expected integer/);
+  expect(() => coerce(count, "")).toThrow(/expected integer/);
+  for (const raw of [0.5, true, [1], { a: 1 }]) {
+    expect(() => coerce(count, raw)).toThrow(/expected integer/);
+  }
+});
+
+test("a string setting takes a YAML scalar as text", () => {
+  expect(coerce({ key: "name", default: "", help: "a name" }, 42)).toBe("42");
+});
+
+test("a string setting rejects a YAML list or mapping", () => {
+  const name = { key: "name", default: "", help: "a name" };
+  expect(() => coerce(name, ["a"])).toThrow(/expected string/);
+  expect(() => coerce(name, { a: 1 })).toThrow(/expected string/);
+});

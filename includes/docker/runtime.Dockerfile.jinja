@@ -1,0 +1,18 @@
+[% if kind == 'web' %]
+# nginx serves dist/ as uid 1000. No stock site or start-up scripts: they rewrite
+# files under /etc at start, which a read-only root file system refuses
+RUN rm -rf /etc/nginx/conf.d /docker-entrypoint.d/* /usr/share/nginx/html/*
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx-site.conf /etc/nginx/site.conf
+COPY --from=builder /app/dist /usr/share/nginx/html/
+[% else %]
+# The base image's own uid 1000 user, `node`, makes way for the project's
+RUN userdel --remove node
+COPY --from=builder /app/package.json /app/
+COPY --from=builder /app/node_modules /app/node_modules/
+COPY --from=builder /app/dist /app/dist/
+COPY --from=builder /app/bin /app/bin/
+ENV PATH="/app/bin:$PATH" \
+    NODE_ENV=production
+[% endif %]
+

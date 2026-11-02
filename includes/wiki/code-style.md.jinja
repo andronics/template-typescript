@@ -1,0 +1,11 @@
+- ESLint (typescript-eslint, strict and type-checked) and Prettier (width 100) decide style; `tsc --strict` decides typing. Don't argue with them in review.
+[% if kind == 'web' %]
+- Comments explain *why*. `src/` never writes to the console: errors show on the page, through the routes' `errorElement`.
+- Routing is React Router in data mode, with one route table (`src/routes.tsx`). A route's data comes from its `loader` (`useLoaderData`), and a change goes through its `action`, not `useEffect` + `fetch`: loading and error states then belong to the router. Add a cache library only when a page needs one.
+- Settings go through `SETTINGS` in `config.ts`, read from `/config.json` at run time, never from `VITE_*` variables at build time: one build runs in every environment.
+[% else %]
+- Comments explain *why*. Only the CLI prints[% if kind == 'service' %]; the service logs through Fastify's logger[% endif %].
+[% endif %]
+[% if has_cli %]
+- Settings go through `SETTINGS` in `config.ts`. Secrets come from `_FILE`, and are never logged.
+[% endif %]

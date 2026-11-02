@@ -1,0 +1,24 @@
+/**
+ * [[ description ]]
+ *
+ * The public API: what this module exports[% if kind == 'library' %] (the wiki's API-Reference page documents it)[% endif %].
+ */
+import { readFileSync } from "node:fs";
+
+interface Manifest {
+  name: string;
+  version: string;
+  description: string;
+}
+
+// package.json is one level above both src/ (development) and dist/ (installed).
+const manifest = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as Manifest;
+
+/** The package name, from package.json. */
+export const NAME: string = manifest.name;
+/** The package version, from package.json. */
+export const VERSION: string = manifest.version;
+/** The package description, from package.json. */
+export const DESCRIPTION: string = manifest.description;

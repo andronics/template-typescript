@@ -1,0 +1,18 @@
+#!/bin/sh
+# Template-owned: template-typescript. After `copier copy` (scripts/bootstrap.sh runs it): install
+# from npm (writes package-lock.json) and fill the wiki's generated sections. Safe to re-run.
+set -eu
+cd "$(dirname "$0")/../.."
+
+if ! command -v npm >/dev/null 2>&1; then
+    echo "npm is not installed: install Node.js >= [[ node_version ]], then re-run scripts/bootstrap.sh" >&2
+    exit 1
+fi
+[% if kind == 'web' %]
+# Writes package-lock.json
+[% else %]
+# Writes package-lock.json, and builds dist/ (the prepare script)
+[% endif %]
+npm install --no-audit --no-fund --loglevel=error > /dev/null
+# Fill the wiki's generated sections (settings, CLI, HTTP API) from the code.
+node scripts/gen-wiki.ts > /dev/null

@@ -1,0 +1,56 @@
+/**
+ * The route table: createBrowserRouter in main.tsx, createMemoryRouter in the tests.
+ *
+ * A route's data comes from its `loader` (useLoaderData), and a change goes through its
+ * `action`, not useEffect + fetch: loading and error states belong to the router.
+ */
+import { Link, Outlet, isRouteErrorResponse, useRouteError, type RouteObject } from "react-router";
+
+import type { Config } from "./config.ts";
+import { Home } from "./pages/Home.tsx";
+import { NotFound } from "./pages/NotFound.tsx";
+
+function Layout() {
+  return (
+    <>
+      <header>
+        <Link to="/">{__APP_NAME__}</Link>
+      </header>
+      <main>
+        <Outlet />
+      </main>
+    </>
+  );
+}
+
+/** A thrown error or a failed loader shows this page, never a blank screen. */
+function RouteError() {
+  const error = useRouteError();
+  const message = isRouteErrorResponse(error)
+    ? `${String(error.status)} ${error.statusText}`
+    : String(error);
+  return (
+    <main role="alert">
+      <h1>Something went wrong</h1>
+      <p>{message}</p>
+    </main>
+  );
+}
+
+/** The routes. The root route's loader is the run-time config (`useRouteLoaderData("root")`). */
+export function routes(config: () => Promise<Config>): RouteObject[] {
+  return [
+    {
+      id: "root",
+      path: "/",
+      loader: config,
+      element: <Layout />,
+      errorElement: <RouteError />,
+      hydrateFallbackElement: <p>Loading…</p>,
+      children: [
+        { index: true, element: <Home /> },
+        { path: "*", element: <NotFound /> },
+      ],
+    },
+  ];
+}

@@ -1,0 +1,105 @@
+# Template-owned: template-typescript. The stack slot base-ci.yml's required `ci` job calls:
+# the jobs that need the project installed. Cheap checks (the wiki standard, version and
+# lock file) run in base-ci's `checks` job through scripts/checks.d/20-typescript.sh.
+name: Stack
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+[% set nodes = ['24', '26'] | select('ge', node_version) | list %]
+  test:
+    name: Test (Node.js ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [[ nodes | tojson ]]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      # The `build:` packages in contrib/system-packages.txt (project-owned), for
+      # dependencies that build from source. None listed: nothing is installed.
+      - name: System packages
+        run: |
+          if grep -q '^build:.*[^[:space:]]' contrib/system-packages.txt; then
+            sudo apt-get update
+            sed -n 's/^build://p' contrib/system-packages.txt | xargs sudo apt-get install -y --no-install-recommends
+          fi
+
+      # npm ci fails if package-lock.json is out of step with package.json: the lock check.
+[% if kind != 'web' %]
+      # It also builds dist/ (the prepare script).
+[% endif %]
+      - name: Install (from the lock file)
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Tests (with coverage floor)
+        run: npm test
+
+[% if kind == 'web' %]
+      - name: Build (Vite)
+        run: |
+          npm run build
+          test -f dist/index.html
+[% else %]
+      - name: Import and entry-point smoke test
+        run: |
+          node --input-type=module -e 'import { VERSION } from "[[ project_name ]]"; console.log("[[ project_name ]]", VERSION)'
+[% if has_cli %]
+          node dist/cli.js --help > /dev/null
+[% endif %]
+[% endif %]
+
+      - name: Generated wiki sections are current
+        if: matrix.node-version == '[[ node_version ]]'
+        run: node scripts/gen-wiki.ts --check
+
+  markdown:
+    name: Markdown lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The image, globs and config live in the script, so a local run matches this one.
+      - name: markdownlint
+        run: scripts/check-markdown.sh
+[% if container_image or contrib %]
+
+  manifests:
+    name: Dockerfile and contrib manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install validators
+        run: |
+          mkdir -p "$HOME/.local/bin"
+[% if container_image %]
+          curl -fsSL -o "$HOME/.local/bin/hadolint" \
+            https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
+          chmod +x "$HOME/.local/bin/hadolint"
+[% endif %]
+[% if 'k8s' in contrib %]
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C "$HOME/.local/bin" kubeconform
+[% endif %]
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Validate
+        run: scripts/check-manifests.sh
+[% endif %]

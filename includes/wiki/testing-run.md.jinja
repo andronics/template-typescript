@@ -1,0 +1,13 @@
+```sh
+npm test                                        # unit tests, with an 80% coverage floor
+[% if kind == 'web' %]
+npx vitest run tests/unit/routes.test.tsx       # a subset
+[% elif has_cli %]
+npx vitest run tests/unit/config.test.ts -t env # a subset
+[% else %]
+npx vitest run tests/unit/version.test.ts       # a subset
+[% endif %]
+npm run test:integration                        # integration tests (real external systems)
+```
+
+CI runs the unit tests on every supported Node.js version, together with ESLint, Prettier, tsc (strict), the wiki checks and the manifest checks. All of them block a merge.

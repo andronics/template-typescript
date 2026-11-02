@@ -1,0 +1,11 @@
+// Runs before every test file (vitest.config.ts). No test sees the developer's own
+// [[ env_prefix ]]* variables; vitest restores them afterwards (unstubEnvs).
+import { beforeEach, vi } from "vitest";
+
+import { ENV_PREFIX } from "../src/config.ts";
+
+beforeEach(() => {
+  for (const name of Object.keys(process.env)) {
+    if (name.startsWith(ENV_PREFIX)) vi.stubEnv(name, undefined);
+  }
+});

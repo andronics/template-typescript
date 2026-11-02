@@ -1,0 +1,42 @@
+# Template-owned: template-typescript (a slot: the stack overlay adds its ecosystems).
+# Weekly dependency PRs; "chore(deps)" keeps them out of the changelog's headline sections.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: chore(deps)
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      dev-dependencies:
+        dependency-type: development
+    commit-message:
+      prefix: chore(deps)
+[% if container_image %]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    # The base image's Node.js must stay inside the CI matrix: take patch-level
+    # image updates only, and move the minor version by hand with stack-ci.yml.
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+[% if kind == 'web' %]
+      # nginx's odd minor versions are mainline: moving to the next stable line is a template release.
+      - dependency-name: nginx
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+[% endif %]
+    commit-message:
+      prefix: chore(deps)
+[% endif %]

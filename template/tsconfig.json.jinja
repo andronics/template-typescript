@@ -1,0 +1,45 @@
+[% if kind == 'web' %]
+{
+  // Type-checks everything (npm run typecheck); Vite builds dist/. The browser code, the
+  // tests and the scripts share it: Node runs scripts/gen-wiki.ts, which imports
+  // src/config.ts, so: erasable syntax only, and imports name the .ts file.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "tests", "scripts", "*.ts"]
+}
+[% else %]
+{
+  // Type-checks everything (npm run typecheck); tsconfig.build.json emits dist/.
+  // Node runs the .ts files directly, so: erasable syntax only, and imports name the .ts file.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src", "tests", "scripts", "*.ts"]
+}
+[% endif %]

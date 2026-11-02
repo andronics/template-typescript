@@ -1,0 +1,182 @@
+/**
+ * Configuration.
+ *
+ * Every setting can come from four places, and the first one that has it wins:
+ *
+ * 1. `[[ env_prefix ]]<NAME>_FILE`: a file that holds the value (Docker / Kubernetes secrets)
+ * 2. `[[ env_prefix ]]<NAME>`: an environment variable
+ * 3. the YAML config file (`[[ env_prefix ]]CONFIG`, default `/etc/[[ project_name ]]/config.yaml`)
+ * 4. the default in SETTINGS
+ *
+ * `<NAME>` is the dotted key in upper case, with the dots as underscores:
+ * `listen.port` is `[[ env_prefix ]]LISTEN_PORT`.
+ *
+ * To add a setting, add it to SETTINGS and to Config, and read it in loadConfig.
+ * The wiki's settings table is generated from SETTINGS (scripts/gen-wiki.ts),
+ * so write its help as you want users to read it. Values are never logged;
+ * only where each one came from is.
+ */
+import { readFileSync } from "node:fs";
+
+import { parse } from "yaml";
+
+import { NAME } from "./index.ts";
+
+export const ENV_PREFIX = "[[ env_prefix ]]";
+export const CONFIG_ENV = `${ENV_PREFIX}CONFIG`;
+export const DEFAULT_CONFIG_PATH = `/etc/${NAME}/config.yaml`;
+export const LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR"] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+export type Value = string | number | boolean;
+export type Env = Readonly<Record<string, string | undefined>>;
+
+/** The configuration can't be read, or a value in it is invalid. */
+export class ConfigError extends Error {
+  override name = "ConfigError";
+}
+
+export interface Setting {
+  readonly key: string;
+  readonly default: Value;
+  readonly help: string;
+  readonly secret?: boolean;
+}
+
+/** The setting's environment variable. */
+export function envName(setting: Setting): string {
+  return ENV_PREFIX + setting.key.toUpperCase().replaceAll(".", "_");
+}
+
+export const SETTINGS: readonly Setting[] = [
+  { key: "log_level", default: "INFO", help: "Log level: `DEBUG`, `INFO`, `WARNING` or `ERROR`." },
+[% if kind == 'service' %]
+  { key: "listen.host", default: "0.0.0.0", help: "Address the HTTP server binds to." },
+  { key: "listen.port", default: [[ port ]], help: "Port the HTTP server listens on." },
+  { key: "state_dir", default: `/var/lib/${NAME}`, help: "Directory for persistent state." },
+[% endif %]
+];
+
+export interface Config {
+  readonly logLevel: LogLevel;
+[% if kind == 'service' %]
+  readonly host: string;
+  readonly port: number;
+  readonly stateDir: string;
+[% endif %]
+  /** Setting key -> where its value came from ("default", "file", an env var name). */
+  readonly sources: Readonly<Record<string, string>>;
+}
+
+function reason(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+function lookup(data: unknown, dotted: string): unknown {
+  let node = data;
+  for (const part of dotted.split(".")) {
+    if (typeof node !== "object" || node === null || !(part in node)) return undefined;
+    node = (node as Record<string, unknown>)[part];
+  }
+  return node;
+}
+
+/** Give raw (a string from the environment, or a YAML value) the default's type. */
+export function coerce(setting: Setting, raw: unknown): Value {
+  const text = typeof raw === "string" ? raw.trim() : JSON.stringify(raw);
+  if (typeof setting.default === "boolean") {
+    if (typeof raw === "boolean") return raw;
+    if (["1", "true", "yes", "on"].includes(text.toLowerCase())) return true;
+    if (["0", "false", "no", "off"].includes(text.toLowerCase())) return false;
+    throw new ConfigError(`${setting.key}: expected boolean, got ${JSON.stringify(raw)}`);
+  }
+  if (typeof setting.default === "number") {
+    const n = typeof raw === "number" ? raw : Number(text);
+    if (text !== "" && Number.isInteger(n)) return n;
+    throw new ConfigError(`${setting.key}: expected integer, got ${JSON.stringify(raw)}`);
+  }
+  // A YAML list or mapping would become its JSON text; scalars (1, 2.5) are fine.
+  if (typeof raw === "object" && raw !== null) {
+    throw new ConfigError(`${setting.key}: expected string, got ${JSON.stringify(raw)}`);
+  }
+  return typeof raw === "string" ? raw : text;
+}
+
+/** The setting's value and where it came from. */
+export function resolve(setting: Setting, data: unknown, env: Env): [Value, string] {
+  const name = envName(setting);
+  const fileVar = `${name}_FILE`;
+  const file = env[fileVar];
+  if (file !== undefined) {
+    try {
+      return [coerce(setting, readFileSync(file, "utf8").trim()), fileVar];
+    } catch (e) {
+      if (e instanceof ConfigError) throw e;
+      throw new ConfigError(`cannot read ${fileVar} (${file}): ${reason(e)}`);
+    }
+  }
+  const fromEnv = env[name];
+  if (fromEnv !== undefined) return [coerce(setting, fromEnv), name];
+  const fromFile = lookup(data, setting.key);
+  if (fromFile !== undefined && fromFile !== null) return [coerce(setting, fromFile), "file"];
+  return [setting.default, "default"];
+}
+
+export function readFile(path: string): Record<string, unknown> {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw new ConfigError(`cannot read ${path}: ${reason(e)}`);
+  }
+  let loaded: unknown;
+  try {
+    loaded = parse(text);
+  } catch (e) {
+    throw new ConfigError(`cannot read ${path}: ${reason(e)}`);
+  }
+  if (loaded === null || loaded === undefined) return {};
+  if (typeof loaded !== "object" || Array.isArray(loaded)) {
+    throw new ConfigError(`${path}: the top level must be a mapping`);
+  }
+  return loaded as Record<string, unknown>;
+}
+
+function isLogLevel(level: string): level is LogLevel {
+  return (LOG_LEVELS as readonly string[]).includes(level);
+}
+
+/** Load the configuration. A missing config file is not an error: defaults apply. */
+export function loadConfig(path?: string, env: Env = process.env): Config {
+  const data = readFile(path ?? env[CONFIG_ENV] ?? DEFAULT_CONFIG_PATH);
+
+  const values: Record<string, Value> = {};
+  const sources: Record<string, string> = {};
+  for (const setting of SETTINGS) {
+    [values[setting.key], sources[setting.key]] = resolve(setting, data, env);
+  }
+
+  const logLevel = String(values.log_level).toUpperCase();
+  if (!isLogLevel(logLevel)) {
+    throw new ConfigError(
+      `log_level: expected one of ${LOG_LEVELS.join(", ")}, got ${JSON.stringify(logLevel)}`,
+    );
+  }
+[% if kind == 'service' %]
+  const port = Number(values["listen.port"]);
+  if (!(port > 0 && port < 65536)) {
+    throw new ConfigError(`listen.port: ${String(port)} is not a TCP port`);
+  }
+[% endif %]
+
+  return {
+    logLevel,
+[% if kind == 'service' %]
+    host: String(values["listen.host"]),
+    port,
+    stateDir: String(values.state_dir),
+[% endif %]
+    sources,
+  };
+}

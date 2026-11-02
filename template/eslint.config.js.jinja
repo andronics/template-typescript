@@ -1,0 +1,42 @@
+import eslint from "@eslint/js";
+import prettier from "eslint-config-prettier";
+[% if kind == 'web' %]
+import reactHooks from "eslint-plugin-react-hooks";
+[% endif %]
+import { defineConfig } from "eslint/config";
+import tseslint from "typescript-eslint";
+
+export default defineConfig(
+  { ignores: ["dist/", "coverage/"] },
+  eslint.configs.recommended,
+  tseslint.configs.strictTypeChecked,
+[% if kind == 'web' %]
+  reactHooks.configs.flat.recommended,
+[% endif %]
+  {
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+[% if kind == 'web' %]
+    rules: {
+      "no-console": "error",
+      // A loader or action throws React Router's data() for an HTTP error.
+      "@typescript-eslint/only-throw-error": [
+        "error",
+        { allow: [{ from: "package", package: "react-router", name: "DataWithResponseInit" }] },
+      ],
+    },
+[% else %]
+    rules: { "no-console": "error" },
+[% endif %]
+  },
+[% if kind == 'web' %]
+  // Only the scripts write to the terminal (and the tests watch them do it).
+  { files: ["scripts/**", "tests/**"], rules: { "no-console": "off" } },
+[% else %]
+  // Only the CLI and the scripts write to the terminal (and the tests watch them do it).
+  { files: ["src/cli.ts", "scripts/**", "tests/**"], rules: { "no-console": "off" } },
+[% endif %]
+  { files: ["**/*.js"], extends: [tseslint.configs.disableTypeChecked] },
+  prettier,
+);

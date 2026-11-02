@@ -1,0 +1,88 @@
+[% import 'includes/layer.jinja' as layer with context %]
+# Deployment
+
+Manifests live in [`contrib/`]([[ repo_url ]]/tree/main/contrib), versioned with the code. release-please moves their image tag to each new release. Every option keeps the same hardening: a non-root user, read-only root, no capabilities.
+[% if 'docker' in contrib %]
+
+## Docker Compose
+
+[% if kind == 'web' %]
+```sh
+cp public/config.json contrib/docker/config.json        # edit it
+docker compose -f contrib/docker/compose.yml up -d
+docker compose -f contrib/docker/compose.yml logs -f
+```
+
+The port binds to `127.0.0.1` only: put a reverse proxy (Traefik) in front for TLS, and route `/api` to the API on the same host name. `config.json` is mounted read-only over the image's copy.
+[% else %]
+```sh
+mkdir -p config state
+cp contrib/[[ project_name ]].example.yaml config/config.yaml   # edit it
+docker compose -f contrib/docker/compose.yml up -d
+docker compose -f contrib/docker/compose.yml logs -f
+```
+
+The port binds to `127.0.0.1` only: put a reverse proxy (Traefik) in front for TLS and remote access.
+[% if puid_pgid %]
+The container starts as root only to give `state/` to `PUID:PGID` (default `1000:1000`), then drops to that user.
+[% endif %]
+Secrets go in files mounted read-only, passed as `[[ env_prefix ]]<KEY>_FILE`.
+[% endif %]
+[% endif %]
+[% if 'k8s' in contrib %]
+
+## Kubernetes
+
+[`contrib/k8s`]([[ repo_url ]]/tree/main/contrib/k8s) is a kustomize base. It contains a Namespace with the *restricted* Pod Security Standard, a Deployment, a Service, a NetworkPolicy, and a ConfigMap generated from `config.[% if kind == 'web' %]json[% else %]yaml[% endif %]`.
+
+```sh
+kubectl apply -k contrib/k8s                       # directly
+```
+
+With Flux, point an overlay in the cluster repo at a release:
+
+```yaml
+# kustomization.yaml in the GitOps repo
+resources:
+  - https://github.com/[[ github_owner ]]/[[ project_name ]]//contrib/k8s?ref=v1.2.3
+patches: []          # replicas, resources, the ConfigMap's config.[% if kind == 'web' %]json[% else %]yaml[% endif %], ingress
+```
+
+[% if kind == 'web' %]
+The NetworkPolicy admits only the `traefik` namespace. The ingress routes `/api` on the same host name to the API's Service. `config.json` is mounted over the image's copy, and the generated ConfigMap's name changes with it, which rolls the Deployment.
+[% else %]
+The NetworkPolicy admits only the `traefik` namespace: add each in-cluster client. State is on an `emptyDir`; swap it for a PersistentVolumeClaim if it must survive a restart. Secrets: SOPS-encrypted Secrets in the GitOps repo, mounted as files.
+[% endif %]
+[% endif %]
+[% if 'systemd' in contrib %]
+
+## systemd
+
+```sh
+install -Dm644 contrib/systemd/[[ project_name ]].sysusers /usr/lib/sysusers.d/[[ project_name ]].conf
+systemd-sysusers
+[% include 'includes/wiki/deploy-systemd-install.sh.jinja' %]
+install -Dm644 contrib/[[ project_name ]].example.yaml /etc/[[ project_name ]]/config.yaml   # edit it
+install -Dm644 contrib/systemd/[[ project_name ]].service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now [[ project_name ]]
+journalctl -u [[ project_name ]] -f
+```
+
+The unit runs as the `[[ project_name ]]` system user in a tight sandbox (`systemd-analyze security [[ project_name ]]` scores it). If a feature needs more access, loosen exactly one directive, with a comment saying why.
+[% endif %]
+
+## Upgrading
+
+Read the [CHANGELOG]([[ repo_url ]]/blob/main/CHANGELOG.md) entries between your version and the new one; breaking changes are marked ⚠. Then:
+
+[% if 'docker' in contrib %]
+- Compose: change the image tag, then `docker compose up -d`.
+[% endif %]
+[% if 'k8s' in contrib %]
+- Kubernetes: change `?ref=` (or the `images:` tag) in the overlay, and let Flux reconcile.
+[% endif %]
+[% if 'systemd' in contrib %]
+- systemd: [[ layer.systemd_upgrade ]], then `systemctl restart [[ project_name ]]`.
+[% endif %]
+
+<!-- guidance: data or config migrations a release needs, and how to roll back. -->

@@ -1,0 +1,5 @@
+[% if kind == 'web' %]
+- The version lives in `package.json` (and `package-lock.json`) and `.release-please-manifest.json`; Vite builds it into the app (`vite.config.ts`), and the home page shows it. CI fails if they disagree.
+[% else %]
+- The version lives in `package.json` (and `package-lock.json`) and `.release-please-manifest.json`; `VERSION` in `src/index.ts` reads `package.json`. CI fails if they disagree.
+[% endif %]

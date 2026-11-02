@@ -1,0 +1,73 @@
+import { afterEach, expect, test, vi } from "vitest";
+
+import { main } from "../../src/cli.ts";
+import { VERSION } from "../../src/index.ts";
+import { writeConfig } from "../helpers.ts";
+
+/** Run the command line, and capture what it prints. */
+async function run(...argv: string[]): Promise<{ code: number; out: string; err: string }> {
+  const out: string[] = [];
+  const err: string[] = [];
+  vi.spyOn(console, "log").mockImplementation((line: string) => out.push(line));
+  vi.spyOn(console, "error").mockImplementation((line: string) => err.push(line));
+  const code = await main(argv);
+  return { code, out: out.join("\n"), err: err.join("\n") };
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+test("version", async () => {
+  const result = await run("version");
+  expect(result.code).toBe(0);
+  expect(result.out).toBe(VERSION);
+});
+
+test("config shows where each value came from", async () => {
+  const result = await run("config", "-c", writeConfig("log_level: debug\n"));
+  expect(result.code).toBe(0);
+  expect(result.out).toContain("log_level = DEBUG  (file)");
+});
+
+test("a config error exits 2", async () => {
+  const result = await run("config", "-c", writeConfig("log_level: loud\n"));
+  expect(result.code).toBe(2);
+  expect(result.err).toContain("log_level");
+});
+
+test("a usage error exits non-zero", async () => {
+  vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+  expect((await run("no-such-command")).code).not.toBe(0);
+});
+
+test("secrets are masked", async () => {
+  vi.resetModules();
+  vi.doMock("../../src/config.ts", async (original) => {
+    const config = await original<typeof import("../../src/config.ts")>();
+    const [first, ...rest] = config.SETTINGS;
+    return { ...config, SETTINGS: [{ ...first, secret: true }, ...rest] };
+  });
+  const cli = await import("../../src/cli.ts");
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
+  await cli.main(["config", "-c", writeConfig("")]);
+  expect(console.log).toHaveBeenCalledWith("log_level = ********  (default)");
+  vi.doUnmock("../../src/config.ts");
+});
+[% if kind == 'service' %]
+
+test("serve answers on its port", async () => {
+  const { serve } = await import("../../src/cli.ts");
+  const { loadConfig } = await import("../../src/config.ts");
+  const cfg = { ...loadConfig(writeConfig("log_level: error\n"), {}), host: "127.0.0.1", port: 0 };
+  const app = await serve(cfg);
+  try {
+    const address = app.server.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+    const response = await fetch(`http://127.0.0.1:${String(port)}[[ health_path ]]`);
+    expect(response.status).toBe(200);
+  } finally {
+    await app.close();
+  }
+});
+[% endif %]

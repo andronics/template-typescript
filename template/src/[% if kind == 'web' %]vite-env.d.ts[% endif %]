@@ -1,0 +1,3 @@
+// Set by vite.config.ts (`define`) from package.json, in the build and in the tests.
+declare const __APP_NAME__: string;
+declare const __APP_VERSION__: string;

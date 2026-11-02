@@ -1,0 +1,37 @@
+import { render, screen } from "@testing-library/react";
+import { RouterProvider, createMemoryRouter, data } from "react-router";
+import { expect, test } from "vitest";
+
+import { ConfigError, parseConfig, type Config } from "../../src/config.ts";
+import { routes } from "../../src/routes.tsx";
+
+/** Render the app's real route table at path. */
+function renderAt(path: string, config: () => Promise<Config>): void {
+  const router = createMemoryRouter(routes(config), { initialEntries: [path] });
+  render(<RouterProvider router={router} />);
+}
+
+const defaults = () => Promise.resolve(parseConfig({}));
+
+test("the home page shows the version and the API base URL", async () => {
+  renderAt("/", defaults);
+  expect(await screen.findByText("/api")).toBeDefined();
+  expect(screen.getByText(`Version ${__APP_VERSION__}`)).toBeDefined();
+});
+
+test("an unknown path is the not-found page", async () => {
+  renderAt("/no/such/page", defaults);
+  expect(await screen.findByRole("heading", { name: "Not found" })).toBeDefined();
+});
+
+test("a config error shows the error page, not a blank screen", async () => {
+  renderAt("/", () => Promise.reject(new ConfigError("apiBaseUrl: expected string, got 42")));
+  expect((await screen.findByRole("alert")).textContent).toContain("apiBaseUrl");
+});
+
+test("an error response shows its status", async () => {
+  renderAt("/", () => {
+    throw data(null, { status: 503, statusText: "Unavailable" });
+  });
+  expect((await screen.findByRole("alert")).textContent).toContain("503 Unavailable");
+});

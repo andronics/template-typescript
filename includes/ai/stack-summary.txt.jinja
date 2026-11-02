@@ -1,0 +1,5 @@
+[% if kind == 'web' %]
+It's a single-page app in TypeScript: React 19, React Router 8 (data mode), Vite, with ESLint, Prettier, tsc (strict) and vitest, served by nginx.
+[% else %]
+It's TypeScript on Node.js >= [[ node_version ]] with npm, ESLint, Prettier, tsc (strict) and vitest.
+[% endif %]

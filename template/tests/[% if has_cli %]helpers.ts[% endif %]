@@ -1,0 +1,15 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/** A new empty directory. */
+export function tempDir(): string {
+  return mkdtempSync(join(tmpdir(), "test-"));
+}
+
+/** Write a config file and return its path. */
+export function writeConfig(text: string): string {
+  const path = join(tempDir(), "config.yaml");
+  writeFileSync(path, text, "utf8");
+  return path;
+}

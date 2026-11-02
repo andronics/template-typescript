@@ -1,0 +1,24 @@
+/** The entry point (index.html): load the run-time config, then render the router. */
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { createBrowserRouter } from "react-router";
+import { RouterProvider } from "react-router/dom";
+
+import { loadConfig } from "./config.ts";
+import { routes } from "./routes.tsx";
+
+// BASE_URL is Vite's `base`: a sub-path deployment changes that one setting.
+const base = import.meta.env.BASE_URL;
+const config = loadConfig(`${base}config.json`);
+const router = createBrowserRouter(
+  routes(() => config),
+  { basename: base },
+);
+
+const root = document.getElementById("root");
+if (root === null) throw new Error("index.html has no #root element");
+createRoot(root).render(
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
+);

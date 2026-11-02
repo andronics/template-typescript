@@ -1,0 +1,44 @@
+import { expect, test, vi } from "vitest";
+
+import { ConfigError, loadConfig, parseConfig } from "../../src/config.ts";
+
+/** Answer every fetch with this response, or fail it with this error. */
+function serve(answer: Response | Error): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => (answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer))),
+  );
+}
+
+test("config.json overrides the defaults", async () => {
+  serve(Response.json({ apiBaseUrl: "https://api.example.org" }));
+  expect(await loadConfig("/config.json")).toEqual({ apiBaseUrl: "https://api.example.org" });
+});
+
+test("no config.json means the defaults", async () => {
+  serve(new Response("", { status: 404 }));
+  expect(await loadConfig("/config.json")).toEqual({ apiBaseUrl: "/api" });
+});
+
+test("no network means the defaults", async () => {
+  serve(new TypeError("Failed to fetch"));
+  expect(await loadConfig("/config.json")).toEqual({ apiBaseUrl: "/api" });
+});
+
+test("a server error is an error", async () => {
+  serve(new Response("", { status: 500 }));
+  await expect(loadConfig("/config.json")).rejects.toThrow(/HTTP 500/);
+});
+
+test("a file that is not JSON is an error", async () => {
+  serve(new Response("<!doctype html>"));
+  await expect(loadConfig("/config.json")).rejects.toThrow(ConfigError);
+});
+
+test("a value of the wrong type is an error", () => {
+  expect(() => parseConfig({ apiBaseUrl: 42 })).toThrow(/apiBaseUrl: expected string, got 42/);
+});
+
+test("the top level must be an object", () => {
+  expect(() => parseConfig(["/api"])).toThrow(/object/);
+});
