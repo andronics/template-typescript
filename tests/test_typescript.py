@@ -46,6 +46,15 @@ def test_checks_pass(project: Path) -> None:
     assert re.fullmatch(r"wiki OK( \(\d+ warning\(s\); --verbose lists them\))?", lines[1]), lines
 
 
+
+def test_release_pr_is_strict(project: Path) -> None:
+    """Only the project's own Release PR runs the wiki check strictly: GITHUB_HEAD_REF=release-please--*
+    fails a skeleton wiki that still holds guidance. The tests' other renders never see it (conftest.py)."""
+    env = {**os.environ, "GITHUB_HEAD_REF": "release-please--branches--main"}
+    result = subprocess.run(["sh", "scripts/checks.sh"], cwd=project, capture_output=True, text=True, env=env)
+    assert result.returncode != 0 and "unwritten guidance" in result.stdout + result.stderr, result.stdout
+    assert "GITHUB_HEAD_REF" not in os.environ
+
 DOD = [
     ("npm", "ci", "--no-audit", "--no-fund", "--loglevel=error"),
     ("npm", "run", "lint"),
