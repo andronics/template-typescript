@@ -207,6 +207,13 @@ def test_no_unrendered_jinja(project: Path) -> None:
     assert leftovers == []
 
 
+def test_design_template_credits_people_only(project: Path) -> None:
+    """Commits, PRs and docs never credit an AI (AGENTS.md): the record template asks for people only."""
+    text = (project / "docs/design/0000-template.md").read_text()
+    assert "Authors: <people>" in text
+    assert not re.search(r"drafted by|assistant|\bAI\b|co-authored|generated (by|with)", text, re.I), text
+
+
 HEADROOM = 0.75  # the skeleton may use at most 75% of the shared budget (template-base's test_base.py)
 
 
