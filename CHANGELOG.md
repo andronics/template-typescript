@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/andronics/template-typescript/compare/v2.0.1...v2.1.0) (2026-11-02)
+
+
+### ✨ Features
+
+* integration-test CI for typescript projects (0002) ([#8](https://github.com/andronics/template-typescript/issues/8)) ([2df9816](https://github.com/andronics/template-typescript/commit/2df9816686479f8e4d20aba23b0b69cb0a8c50c6))
+
 ## [2.0.1](https://github.com/andronics/template-typescript/compare/v2.0.0...v2.0.1) (2026-11-02)
 
 
