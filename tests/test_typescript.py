@@ -72,7 +72,7 @@ def test_docker_checks(project: Path) -> None:
     cmds = [("bash", "scripts/check-docs-secrets.sh"), ("bash", "scripts/check-markdown.sh"),
             ("docker", "run", "--rm", "-v", f"{project}:/repo", "-w", "/repo", "rhysd/actionlint:1.7.12", "-color")]  # fmt: skip
     if (project / "Dockerfile").is_file():
-        cmds.append(("sh", "-c", "docker run --rm -i hadolint/hadolint:v2.14.0 < Dockerfile"))
+        cmds.append(("sh", "-c", "docker run --rm -i hadolint/hadolint:v2.15.1 < Dockerfile"))
     for cmd in cmds:
         result = run(project, *cmd)
         assert result.returncode == 0, f"{' '.join(cmd)}:\n{result.stdout}\n{result.stderr}"
