@@ -214,6 +214,13 @@ def test_design_template_credits_people_only(project: Path) -> None:
     assert not re.search(r"drafted by|assistant|\bAI\b|co-authored|generated (by|with)", text, re.I), text
 
 
+def test_pr_template_names_no_ai(project: Path) -> None:
+    """Commits, PRs and docs never credit an AI (AGENTS.md): the PR template asks if it was generated, not by what."""
+    text = (project / ".github/pull_request_template.md").read_text()
+    assert "- [ ] Generated: most of this was written by an AI assistant\n" in text
+    assert "tool and model" not in text
+
+
 HEADROOM = 0.75  # the skeleton may use at most 75% of the shared budget (template-base's test_base.py)
 
 
