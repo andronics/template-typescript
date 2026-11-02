@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.3](https://github.com/andronics/template-typescript/compare/v2.1.2...v2.1.3) (2026-11-02)
+
+
+### 🐛 Bug Fixes
+
+* the PR template asks whether a PR was generated, not by what ([#17](https://github.com/andronics/template-typescript/issues/17)) ([5f54005](https://github.com/andronics/template-typescript/commit/5f540056cc61cd852f8e888830478ea0e9d96d0b))
+
 ## [2.1.2](https://github.com/andronics/template-typescript/compare/v2.1.1...v2.1.2) (2026-11-02)
 
 
