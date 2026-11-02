@@ -94,7 +94,7 @@ def test_never_asks_base_questions(base_src: Path) -> None:
     asked = {k for k, v in config.items()
              if not k.startswith("_") and v.get("when") is not False and v.get("ask") is not False}  # fmt: skip
     assert asked == {"kind", "node_version", "port", "extra_ports", "health_path", "container_image", "contrib",
-                     "puid_pgid", "timezone"}  # fmt: skip
+                     "puid_pgid", "timezone", "integration_ci"}  # fmt: skip
     base = yaml.safe_load((base_src / "copier.yml").read_text())
     assert not asked & {k for k in base if not k.startswith("_")}
     assert config["_external_data"] == {"base": ".copier-answers.base.yml"}
@@ -288,3 +288,96 @@ def test_base_update_then_overlay_update(base_src: Path, ts_src: Path, tmp_path:
     assert recorded["description"] == "A changed description"
     assert "<<<<<<<" not in sh("git", "diff", cwd=project)
     assert checks(commit(project)).returncode == 0
+
+
+def test_integration_job_only_when_asked(project: Path, variant: str) -> None:
+    """integration_ci adds the Integration tests job, on the minimum Node.js, and the Testing-Guide says so
+    (decision 0002); off, neither changes. It is a stack-ci.yml job, so base-ci's `ci` requires it."""
+    jobs = yaml.safe_load((project / ".github/workflows/stack-ci.yml").read_text())["jobs"]
+    guide = (project / "docs/wiki/Testing-Guide.md").read_text()
+    if not MATRIX[variant].get("integration_ci"):
+        assert "integration" not in jobs and "Integration tests** job" not in guide
+        return
+    job = jobs["integration"]
+    assert job["name"] == "Integration tests"
+    node = next(s for s in job["steps"] if s.get("uses", "").startswith("actions/setup-node@"))
+    assert node["with"] == {"node-version": "24", "cache": "npm"}
+    runs = "\n".join(s.get("run", "") for s in job["steps"])
+    assert "^(build|runtime):" in runs and "npm ci --no-audit --no-fund" in runs
+    assert "npm run test:integration -- --reporter=default --reporter=junit" in runs
+    assert "The **Integration tests** job runs the integration tests too" in guide
+    base_ci = yaml.safe_load((project / ".github/workflows/base-ci.yml").read_text())["jobs"]
+    assert base_ci["stack"]["uses"] == "./.github/workflows/stack-ci.yml" and "stack" in base_ci["ci"]["needs"]
+
+
+# tests/integration/ for each case: (files, passes, what the job says). `real` is a real round trip: a
+# local HTTP server, fetched; test.fails is an expected failure, which passes.
+REAL = """import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+
+import { expect, test } from "vitest";
+
+test("an HTTP round trip", async () => {
+  const server = createServer((_req, res) => res.end("pong"));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const res = await fetch(`http://127.0.0.1:${port}/ping`);
+    expect(await res.text()).toBe("pong");
+  } finally {
+    server.close();
+  }
+});
+"""
+HEAD = 'import { expect, test } from "vitest";\n\ntest("runs", () => expect(1 + 1).toBe(2));\n'
+INTEGRATION_CASES = {
+    "real": ({"real.test.ts": REAL, "fails.test.ts": HEAD + 'test.fails("is expected to fail", () => expect(1).toBe(2));\n'},
+             True, None),
+    "no tests": ({}, False, "::error::no integration test ran"),
+    "skip": ({"skip.test.ts": HEAD + 'test.skip("needs a device", () => expect(1).toBe(1));\n'},
+             False, "::error::skipped tests/integration/skip.test.ts > needs a device"),
+    "skipIf": ({"skipif.test.ts": HEAD + 'test.skipIf(true)("needs a service", () => expect(1).toBe(1));\n'},
+               False, "::error::skipped tests/integration/skipif.test.ts > needs a service"),
+    "todo": ({"todo.test.ts": HEAD + 'test.todo("later");\n'},
+             False, "::error::skipped tests/integration/todo.test.ts > later"),
+}  # fmt: skip
+
+
+def integration_job(project: Path, runner_temp: Path, steps: list[str]) -> tuple[bool, str]:
+    """Run the rendered Integration tests job's named steps, as Actions does (bash -e, in order, stop at
+    the first failure). System packages needs sudo and apt; the lists are empty here anyway."""
+    job = yaml.safe_load((project / ".github/workflows/stack-ci.yml").read_text())["jobs"]["integration"]
+    by_name = {s["name"]: s["run"] for s in job["steps"] if "name" in s}
+    out = ""
+    for name in steps:
+        result = subprocess.run(["bash", "-e", "-c", by_name[name]], cwd=project, capture_output=True, text=True,
+                                env={**os.environ, "RUNNER_TEMP": str(runner_temp)})  # fmt: skip
+        out += f"--- {name}\n{result.stdout}{result.stderr}"
+        if result.returncode != 0:
+            return False, out
+    return True, out
+
+
+@pytest.mark.parametrize("kind", ["library", "web"])
+def test_integration_job_fails_unless_a_test_runs(kind: str, base_src: Path, ts_src: Path, tmp_path: Path) -> None:
+    """The rendered job passes with a real integration test (and a test.fails), and fails, naming the test,
+    with none, a skip, a skipIf or a todo; and with no report at all (decision 0002)."""
+    project = render(base_src, ts_src, tmp_path / "p", kind=kind, container_image=False, integration_ci=True)
+    ok, out = integration_job(project, tmp_path, ["Install (from the lock file)"])
+    assert ok, out
+    tests, check = ["Integration tests", "An integration test ran, and none was skipped"], tmp_path / "cases"
+    for case, (files, passes, says) in INTEGRATION_CASES.items():
+        folder = project / "tests/integration"
+        for old in folder.glob("*.test.ts"):
+            old.unlink()
+        for name, text in files.items():
+            (folder / name).write_text(text)
+        temp = check / case.replace(" ", "-")
+        temp.mkdir(parents=True)
+        ok, out = integration_job(project, temp, tests)
+        assert ok is passes, f"{case}:\n{out}"
+        assert (temp / "integration.xml").is_file(), f"{case}:\n{out}"
+        if says:
+            assert says in out, f"{case}:\n{out}"
+    ok, out = integration_job(project, tmp_path, tests[1:])
+    assert not ok and "::error::no test report at" in out, out

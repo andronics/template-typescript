@@ -1,6 +1,6 @@
 # 0002: An opt-in integration test job in CI
 
-Status: Proposed
+Status: Accepted (2026-11-02)
 Date: 2026-11-02
 Authors: Stephen Cox; drafted by Claude (Claude Code)
 
@@ -86,13 +86,13 @@ already in TODO.md's "Decided against". A project that needs it in CI asks, and 
 - **Release**: `feat:`, a minor release. 0001's "no `integration_ci`" line and its index entry change when
   this is implemented; the rejected alternatives go into TODO.md's "Decided against".
 
-## Open questions
+## Resolved questions
 
-1. **Every kind, or not `web`?** Recommend every kind: same script, same folder, default off, no branch.
-2. **Fail on `todo` as well as `skip`?** Recommend yes: a `todo` in an on-by-answer job is a test that
-   doesn't run, which is what the job exists to catch. A project keeps unfinished tests out of
-   `tests/integration/`.
-3. **Leave `passWithNoTests: integration` in the configs?** Recommend yes: the job enforces non-empty,
+Stephen accepted this record on 2026-11-02 with each open question answered as recommended:
+
+1. **Every kind, or not `web`?** Every kind, `web` included: same script, same folder, default off, no branch.
+2. **Fail on `todo` as well as `skip`?** Yes: a `todo` in `tests/integration/` fails the job as a skip does.
+   A project keeps unfinished tests out of that folder.
+3. **Leave `passWithNoTests: integration` in the configs?** Yes: the job's report check enforces non-empty,
    and a project with no integration tests yet keeps a green local run.
-4. **Playwright/e2e**: confirm it is out of scope, a separate record if a `web` project asks. Recommend
-   yes: different tools, different runner, and the skeleton already declines Playwright.
+4. **Playwright/e2e?** Out of scope: a separate record if a `web` project asks.

@@ -27,7 +27,7 @@ and contrib, through its own Definition of done.
 - **Asks** `kind` (`service`, `cli`, `library`, **`web`**), `node_version`, `port`, `extra_ports`,
   `health_path`, `container_image`, `contrib`, `puid_pgid`, `timezone`. These are project-template's
   TypeScript questions, unchanged. `has_cli` is derived (`kind in [service, cli]`). It has no
-  `image_extras` or `integration_ci`, which were Python's.
+  `image_extras`, which was Python's. `integration_ci` came later, in [0002](0002-integration-ci.md).
 - **The web kind** (was 0014): Vite + React 19 and React Router 8 (data mode), run-time `/config.json`,
   served by nginx as uid 1000. `index.html`, `public/config.json` and `docker/nginx-site.conf` are the
   project's once written; `docker/nginx.conf` is this overlay's. With an image, template-container's

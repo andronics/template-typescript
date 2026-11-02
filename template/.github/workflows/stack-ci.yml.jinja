@@ -71,6 +71,60 @@ jobs:
       - name: Generated wiki sections are current
         if: matrix.node-version == '[[ node_version ]]'
         run: node scripts/gen-wiki.ts --check
+[% if integration_ci %]
+
+  # The Copier answer `integration_ci`: tests/integration/ (docs/decisions/0002 in
+  # template-typescript). It fails, never passes vacuously, when none runs or one is
+  # skipped (a missing package, device or service). On the minimum Node.js only.
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "[[ node_version ]]"
+          cache: npm
+
+      # Both lists in contrib/system-packages.txt: `build:` to install the dependencies,
+      # `runtime:` for the tests to use them.
+      - name: System packages
+        run: |
+          if grep -qE '^(build|runtime):.*[^[:space:]]' contrib/system-packages.txt; then
+            sudo apt-get update
+            sed -nE 's/^(build|runtime)://p' contrib/system-packages.txt | xargs sudo apt-get install -y --no-install-recommends
+          fi
+
+      - name: Install (from the lock file)
+        run: npm ci --no-audit --no-fund
+
+      # The script sets RUN_INTEGRATION=1. vitest passes with no tests in this mode
+      # (passWithNoTests), so the next step reads its report. The coverage floor is the Test job's.
+      - name: Integration tests
+        run: npm run test:integration -- --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/integration.xml"
+
+      # vitest writes <skipped/> for skip, skipIf and todo; test.fails is a passed case.
+      - name: An integration test ran, and none was skipped
+        run: |
+          python3 - "$RUNNER_TEMP/integration.xml" <<'EOF'
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          report = Path(sys.argv[1])
+          if not report.is_file():
+              print(f"::error::no test report at {report}: vitest's junit reporter didn't run")
+              sys.exit(1)
+          cases = list(ET.parse(report).iter("testcase"))
+          if not cases:
+              print("::error::no integration test ran: add one to tests/integration/")
+          skipped = [f"{case.get('classname')} > {case.get('name')}" for case in cases if case.find("skipped") is not None]
+          for test in skipped:
+              print(f"::error::skipped {test}")
+          sys.exit(1 if skipped or not cases else 0)
+          EOF
+[% endif %]
 
   markdown:
     name: Markdown lint
