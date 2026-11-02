@@ -21,8 +21,9 @@ and contrib, through its own Definition of done.
 
 - **A TypeScript project is base + this overlay** (+ template-container for an image's workflows and the
   docker and k8s manifests). It writes `.copier-answers.stack-typescript.yml` and fails unless base is
-  `v1.0.0` or later. It reads base's answers as template-python does, `base_answers` copy included, because
-  `copier update` replays without base's answers file.
+  `v2.0.0` or later. It reads base's answers as template-python does, through the recorded `base_answers`
+  (template-base 0001's pattern), because `copier update` replays without base's answers file. It fills
+  base 2.0.0's PR-template and issue-config slots as template-python does.
 - **Asks** `kind` (`service`, `cli`, `library`, **`web`**), `node_version`, `port`, `extra_ports`,
   `health_path`, `container_image`, `contrib`, `puid_pgid`, `timezone`. These are project-template's
   TypeScript questions, unchanged. `has_cli` is derived (`kind in [service, cli]`). It has no
@@ -62,5 +63,4 @@ As template-python's 0001. Also:
 
 ## Open questions
 
-- **template-base#8 (PR template and issue config as slots):** as for template-python. Ship both files and
-  raise the minimum base version in the same release.
+None.

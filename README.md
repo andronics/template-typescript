@@ -10,7 +10,7 @@ uvx copier copy --trust gh:andronics/template-container my-project   # with cont
 ```
 
 It asks `kind` (`service`, `cli`, `library`, `web`) and the TypeScript questions, and reads the project's identity from
-base's answers. It needs template-base `v1.0.0` or later.
+base's answers. It needs template-base `v2.0.0` or later.
 
 ## What it adds
 

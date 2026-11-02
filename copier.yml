@@ -9,7 +9,7 @@
 # .pre-commit-config.yaml, .claude/settings.json, README.md, dependabot.yml) and adds
 # typescript-* workflows and scripts/checks.d/20-typescript.sh (docs/decisions/0001).
 
-_min_copier_version: "9.6.0"
+_min_copier_version: "9.19.0"
 _subdirectory: template
 _templates_suffix: .jinja
 _answers_file: .copier-answers.stack-typescript.yml
@@ -87,61 +87,68 @@ _message_after_update: |
 
 # ------------------------------------- from base (read, never asked)
 
-# Base must be applied first, at v1.0.0 or later: its answers file is where this overlay
-# reads the project's identity. Fails the copy or update with the reason otherwise.
-# `copier update` re-renders the old and new versions in empty temporary directories, where
-# base's answers file doesn't exist: there the values come from `base_answers`, the copy this
-# overlay keeps in its own answers file (never asked; see decision 0001), and the check passes.
+# Base's answers, as this overlay's templates read them. `copier update` replays each version in
+# an empty directory, without .copier-answers.base.yml, so they're recorded in this overlay's
+# answers file (template-base decision 0001, "Overlays keep a copy of base's answers"). ask: false
+# never prompts; the validator rejects a recorded copy that differs from base's file, so Copier
+# rereads the file and the next replay gets the new one.
+base_answers:
+  type: yaml
+  ask: false
+  default: "[[ dict(_external_data.base | items | rejectattr('0', 'in', ['_commit', '_src_path'])) | tojson ]]"
+  validator: >-
+    [% if _external_data.base and base_answers != dict(_external_data.base | items
+       | rejectattr('0', 'in', ['_commit', '_src_path'])) %]stale: reread .copier-answers.base.yml[% endif %]
+
+# Base must be applied first, at v2.0.0 or later (the PR-template and issue-config slots, and this
+# base_answers pattern). Fails the copy or update with the reason otherwise. A replay has no base
+# answers file, only the recorded base_answers; the real render beside it reads the file, so the
+# check runs there.
 base_check:
   type: str
   when: false
   default: >-
     [%- set c = _external_data.base._commit | default('') | string -%]
     [%- set v = (c | regex_search('^v?(\\d+)\\.(\\d+)\\.(\\d+)', '\\1', '\\2', '\\3')) -%]
-    [%- if not c and base_answers is defined -%]ok
+    [%- if not c and base_answers | default({}) -%]ok
     [%- elif not c -%][[ {}['template-typescript needs template-base first: .copier-answers.base.yml is missing'].stop ]]
-    [%- elif not v or (v | map('int') | list) < [1, 0, 0] -%][[ {}['template-typescript needs template-base v1.0.0 or later; this project has ' ~ c].stop ]]
+    [%- elif not v or (v | map('int') | list) < [2, 0, 0] -%][[ {}['template-typescript needs template-base v2.0.0 or later; this project has ' ~ c].stop ]]
     [%- else -%]ok[%- endif -%]
 
-# Base's answers, read through _external_data (never asked here).
-recorded_base:
-  type: yaml
-  default: "[[ base_answers | default({}) | tojson ]]"
-  when: false
-
+# Base's values under the names the templates use, all from base_answers (never asked here).
 project_name:
   type: str
-  default: "[[ _external_data.base.project_name | default(recorded_base.project_name) ]]"
+  default: "[[ base_answers.project_name ]]"
   when: false
 
 description:
   type: str
-  default: "[[ _external_data.base.description | default(recorded_base.description) ]]"
+  default: "[[ base_answers.description ]]"
   when: false
 
 github_owner:
   type: str
-  default: "[[ _external_data.base.github_owner | default(recorded_base.github_owner) ]]"
+  default: "[[ base_answers.github_owner ]]"
   when: false
 
 code_owners:
   type: str
-  default: "[[ _external_data.base.code_owners | default(recorded_base.code_owners) | default('@' ~ github_owner ~ '/maintainers') ]]"
+  default: "[[ base_answers.code_owners | default('@' ~ base_answers.github_owner ~ '/maintainers') ]]"
   when: false
 
 license:
   type: str
-  default: "[[ _external_data.base.license | default(recorded_base.license) ]]"
+  default: "[[ base_answers.license | default('Unlicense') ]]"
   when: false
 
 copyright_holder:
   type: str
-  default: "[[ _external_data.base.copyright_holder | default(recorded_base.copyright_holder) | default(github_owner) ]]"
+  default: "[[ base_answers.copyright_holder | default(base_answers.github_owner) ]]"
   when: false
 
 personal_data_guard:
   type: bool
-  default: "[[ _external_data.base.personal_data_guard | default(recorded_base.personal_data_guard) | default(false) ]]"
+  default: "[[ base_answers.personal_data_guard | default(false) ]]"
   when: false
 
 # ---------------------------------------------------------------- questions
