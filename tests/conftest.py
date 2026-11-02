@@ -12,7 +12,13 @@ from stacking import ROOT, commit, copy, sh, sibling, stage  # noqa: E402
 
 # Each render gets a venv: link it to uv's cache instead of copying every package into it.
 os.environ.setdefault("UV_LINK_MODE", "symlink")
+# A rendered project's checks must behave as on a developer's machine or in its own CI, not as
+# a step of this repository's: GitHub Actions' GITHUB_ACTIONS turns check-wiki.py's summary into
+# ::warning annotations. CI=true stays, so a missing tool fails as it would in the project's CI.
+os.environ.pop("GITHUB_ACTIONS", None)
 
+# The base version this overlay needs, and its tests render (staged copies are tagged with it).
+BASE_VERSION = "v2.0.0"
 BASE = {"project_name": "demo", "description": "A demo project", "github_owner": "metalayerlab"}
 
 # The render matrix: kind x container_image x contrib (has_cli follows kind). Each one must
@@ -38,7 +44,7 @@ def base_src(tmp_path_factory: pytest.TempPathFactory) -> Path:
     base = sibling("template-base", "TEMPLATE_BASE")
     if base is None:
         pytest.fail("template-base must be checked out next to this repository, or set TEMPLATE_BASE")
-    return stage(base, tmp_path_factory.mktemp("src") / "template-base")
+    return stage(base, tmp_path_factory.mktemp("src") / "template-base", tag=BASE_VERSION)
 
 
 @pytest.fixture(scope="session")

@@ -23,11 +23,12 @@ from conftest import BASE, MATRIX, render
 from stacking import GIT, ROOT, checks, commit, copy, sh, stage
 
 SLOTS = [".github/workflows/stack-ci.yml", ".agents/stack.md", ".gitignore", ".pre-commit-config.yaml",
-         ".claude/settings.json", "README.md", ".github/dependabot.yml"]  # fmt: skip
+         ".claude/settings.json", "README.md", ".github/dependabot.yml", ".github/pull_request_template.md",
+         ".github/ISSUE_TEMPLATE/config.yml"]  # fmt: skip
 # Files project-template v0.1.23 rendered that are now another template's (decision 0001).
 NOT_OURS = ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "LICENSE", ".editorconfig", ".gitleaks.toml",
             ".github/workflows/base-ci.yml", ".github/workflows/template-update.yml", ".github/workflows/pr-title.yml",
-            ".github/pull_request_template.md", ".github/copilot-instructions.md", ".github/CODEOWNERS",
+            ".github/copilot-instructions.md", ".github/CODEOWNERS",
             "scripts/checks.sh", "scripts/bootstrap.sh", "scripts/post-update.sh", "scripts/check-docs-secrets.sh",
             "scripts/repo-boundary.py", "scripts/repo-metadata.py", "scripts/base-contract.py"]  # fmt: skip
 
@@ -80,7 +81,9 @@ def test_docker_checks(project: Path) -> None:
 def test_never_asks_base_questions(base_src: Path) -> None:
     """One answer, one place: base's identity is read through _external_data (decision 0001)."""
     config = yaml.safe_load((ROOT / "copier.yml").read_text())
-    asked = {k for k, v in config.items() if not k.startswith("_") and v.get("when") is not False}
+    # ask: false (base_answers) is recorded, never prompted.
+    asked = {k for k, v in config.items()
+             if not k.startswith("_") and v.get("when") is not False and v.get("ask") is not False}  # fmt: skip
     assert asked == {"kind", "node_version", "port", "extra_ports", "health_path", "container_image", "contrib",
                      "puid_pgid", "timezone"}  # fmt: skip
     base = yaml.safe_load((base_src / "copier.yml").read_text())
@@ -108,7 +111,7 @@ def test_reads_base_answers(project: Path) -> None:
 
 @pytest.mark.parametrize(("base", "error"), [
     (None, "needs template-base first: .copier-answers.base.yml is missing"),
-    ("v0.9.0", "needs template-base v1.0.0 or later; this project has v0.9.0"),
+    ("v1.0.0", "needs template-base v2.0.0 or later; this project has v1.0.0"),
 ])  # fmt: skip
 def test_needs_base_first(base: str | None, error: str, ts_src: Path, base_src: Path, tmp_path: Path) -> None:
     """Base goes first, at the version the overlay needs; otherwise the copy fails and says why."""
@@ -144,7 +147,7 @@ def test_takes_none_of_base_files(base_src: Path, ts_src: Path, tmp_path: Path) 
     dst = tmp_path / "p"
     dst.mkdir()
     (dst / ".copier-answers.base.yml").write_text(
-        "_commit: v1.0.0\nproject_name: demo\ndescription: d\ngithub_owner: o\n"
+        "_commit: v2.0.0\nproject_name: demo\ndescription: d\ngithub_owner: o\n"
     )
     copy(ts_src, dst, {"kind": "service", "container_image": True, "contrib": ["systemd"]})
     assert [f for f in NOT_OURS if (dst / f).exists()] == []
@@ -203,7 +206,7 @@ def test_container_contrib_needs_the_container_overlay(base_src: Path, ts_src: P
 
 
 def update(project: Path, ref: str) -> None:
-    sh("uvx", "--from", "copier>=9.6,<10", "copier", "update", "-a", ".copier-answers.stack-typescript.yml", "--trust",
+    sh("uvx", "--from", "copier>=9.19,<10", "copier", "update", "-a", ".copier-answers.stack-typescript.yml", "--trust",
        "--skip-tasks", "--defaults", "--conflict", "inline", "--vcs-ref", ref, cwd=project)  # fmt: skip
 
 
@@ -241,3 +244,38 @@ def test_update_keeps_base_values(base_src: Path, ts_src: Path, tmp_path: Path) 
     assert "// a project edit" in (project / "src/index.ts").read_text()
     assert "<<<<<<<" not in sh("git", "diff", cwd=project)
     assert '"name": "demo"' in (project / "package.json").read_text()
+
+
+def test_base_update_then_overlay_update(base_src: Path, ts_src: Path, tmp_path: Path) -> None:
+    """Base v2.0.0 -> v2.0.1 with a changed answer, then this overlay: the new answer reaches its files
+    (template-base's tests/test_update.py, for a real overlay)."""
+    src = ts_src
+    project = render(base_src, src, tmp_path / "p", kind="cli", container_image=False)
+    newer_base = tmp_path / "newer-base"
+    shutil.copytree(base_src, newer_base)
+    claude = newer_base / "template/CLAUDE.md.jinja"
+    claude.write_text(claude.read_text().replace("@AGENTS.md", "@AGENTS.md\n", 1))
+    sh(*GIT, "commit", "-qam", "newer", cwd=newer_base)
+    sh("git", "tag", "v2.0.1", cwd=newer_base)
+    base_answers = project / ".copier-answers.base.yml"
+    base_answers.write_text(base_answers.read_text().replace(str(base_src), str(newer_base)))
+    commit(project)
+    sh("uvx", "--from", "copier>=9.19,<10", "copier", "update", "-a", ".copier-answers.base.yml", "--trust",
+       "--skip-tasks", "--defaults", "--conflict", "inline", "--vcs-ref", "v2.0.1", "-d",
+       "description=A changed description", cwd=project)  # fmt: skip
+    commit(project)
+    newer = tmp_path / "newer"
+    shutil.copytree(src, newer)
+    contributing = newer / "template/CONTRIBUTING.md.jinja"
+    contributing.write_text(contributing.read_text() + "\nA newer line.\n")
+    sh(*GIT, "commit", "-qam", "newer", cwd=newer)
+    sh("git", "tag", "v1.0.1", cwd=newer)
+    answers = project / ".copier-answers.stack-typescript.yml"
+    answers.write_text(answers.read_text().replace(str(src), str(newer)))
+    commit(project)
+    update(project, "v1.0.1")
+    assert "A changed description" in (project / "README.md").read_text()
+    recorded = yaml.safe_load(answers.read_text())["base_answers"]
+    assert recorded["description"] == "A changed description"
+    assert "<<<<<<<" not in sh("git", "diff", cwd=project)
+    assert checks(commit(project)).returncode == 0
