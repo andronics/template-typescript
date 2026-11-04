@@ -1,6 +1,6 @@
 # 0002: An opt-in integration test job in CI
 
-Status: Accepted (2026-11-02)
+Status: Approved (2026-11-02)
 Date: 2026-11-02
 Authors: Stephen Cox
 
