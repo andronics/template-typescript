@@ -326,6 +326,26 @@ def test_base_update_then_overlay_update(base_src: Path, ts_src: Path, tmp_path:
     assert checks(commit(project)).returncode == 0
 
 
+# Outside the Basic Multilingual Plane (💡), CJK, a quote and a backslash: `tojson` wrote the emoji
+# as a surrogate pair, which YAML reads back as two characters.
+UNICODE = 'Ideas 💡 in 漢字, with a "quote" and a back\\slash'
+
+
+def test_unicode_description(base_src: Path, ts_src: Path, tmp_path: Path) -> None:
+    """Any Unicode in base's description renders: the recorded base answers match base's file (no
+    "stale" error), package.json holds it verbatim, and the project passes its Definition of done."""
+    project = render(base_src, ts_src, tmp_path / "demo", base={"description": UNICODE}, kind="cli")
+    recorded = yaml.safe_load((project / ".copier-answers.stack-typescript.yml").read_text())["base_answers"]
+    assert recorded["description"] == UNICODE
+    package = (project / "package.json").read_text()
+    assert json.loads(package)["description"] == UNICODE and "💡" in package
+    result = checks(project)
+    assert result.returncode == 0, result.stdout + result.stderr
+    for cmd in DOD:
+        result = run(project, *cmd)
+        assert result.returncode == 0, f"{' '.join(cmd)}:\n{result.stdout}\n{result.stderr}"
+
+
 def test_integration_job_only_when_asked(project: Path, variant: str) -> None:
     """integration_ci adds the Integration tests job, on the minimum Node.js, and the Testing-Guide says so
     (decision 0002); off, neither changes. It is a stack-ci.yml job, so base-ci's `ci` requires it."""
