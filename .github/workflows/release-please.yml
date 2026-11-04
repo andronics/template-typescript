@@ -1,4 +1,4 @@
-# Versions template-obsidian. Projects pin to these tags (.copier-answers.*.yml
+# Versions template-typescript. Projects pin to these tags (.copier-answers.*.yml
 # _commit), and `copier update` moves them to the newest one, so every template
 # change goes through a reviewed Release PR with a CHANGELOG entry.
 name: Release
