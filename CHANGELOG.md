@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.7](https://github.com/andronics/template-typescript/compare/v2.1.6...v2.1.7) (2026-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **copier:** descriptions with any Unicode and any length scaffold cleanly ([#26](https://github.com/andronics/template-typescript/issues/26)) ([740f0b0](https://github.com/andronics/template-typescript/commit/740f0b0b9c6aea5ad8bc933a652b4d44bf9ae8f8))
+
 ## [2.1.6](https://github.com/andronics/template-typescript/compare/v2.1.5...v2.1.6) (2026-11-04)
 
 
