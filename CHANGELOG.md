@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.4](https://github.com/andronics/template-typescript/compare/v2.1.3...v2.1.4) (2026-11-04)
+
+
+### 📚 Documentation
+
+* **decisions:** say Approved, not Accepted ([#19](https://github.com/andronics/template-typescript/issues/19)) ([fd4e2b2](https://github.com/andronics/template-typescript/commit/fd4e2b21e1a458e7ea04865b197062505c6a111f))
+
 ## [2.1.3](https://github.com/andronics/template-typescript/compare/v2.1.2...v2.1.3) (2026-11-02)
 
 
