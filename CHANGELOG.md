@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.6](https://github.com/andronics/template-typescript/compare/v2.1.5...v2.1.6) (2026-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **release:** don't parse an empty release-please output ([#25](https://github.com/andronics/template-typescript/issues/25)) ([033904b](https://github.com/andronics/template-typescript/commit/033904b217340d7bfda6f4a4ed97d1b7274c8e75))
+
 ## [2.1.5](https://github.com/andronics/template-typescript/compare/v2.1.4...v2.1.5) (2026-11-04)
 
 
