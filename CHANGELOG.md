@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.5](https://github.com/andronics/template-typescript/compare/v2.1.4...v2.1.5) (2026-11-04)
+
+
+### 🐛 Bug Fixes
+
+* **release:** keep the release PR from closing issues ([#22](https://github.com/andronics/template-typescript/issues/22)) ([78a0c71](https://github.com/andronics/template-typescript/commit/78a0c71c90a798925db0e3ab823206d7f911a531))
+
+
+### 📚 Documentation
+
+* **design:** give the record template a change log ([#23](https://github.com/andronics/template-typescript/issues/23)) ([e2fe8e7](https://github.com/andronics/template-typescript/commit/e2fe8e714ab090b0c44c97f4d6986ae9f0e1b12c))
+
 ## [2.1.4](https://github.com/andronics/template-typescript/compare/v2.1.3...v2.1.4) (2026-11-04)
 
 
